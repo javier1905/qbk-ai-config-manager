@@ -6,6 +6,7 @@ import type { AiConfig } from './config.js';
 import { addRepoCommand, switchRepoCommand } from './commands/repo.js';
 import { switchProfileCommand, addProfileCommand, removeProfileCommand } from './commands/profile.js';
 import { switchVersionCommand } from './commands/version.js';
+import { publishCommand } from './commands/publish.js';
 import { GitManager } from './git.js';
 import chalk from 'chalk';
 import readline from 'readline';
@@ -64,7 +65,7 @@ function printHeader(config: AiConfig | null) {
 
 // ─── Menu Builder ─────────────────────────────────────────────
 
-function buildMenuChoices(config: AiConfig | null, branchCount: number) {
+function buildMenuChoices(config: AiConfig | null, branchCount: number, isOnLatest: boolean) {
   const hasRepo = config !== null && config.repositories.length > 0;
   const hasMultipleRepos = config !== null && config.repositories.length > 1;
   const hasSelectedRepo = config !== null && config.selectedRepoIndex >= 0;
@@ -122,6 +123,15 @@ function buildMenuChoices(config: AiConfig | null, branchCount: number) {
       value: 'switch-version',
       description: 'Checkout a specific commit',
     });
+
+    // 7. Publish Changes (only if on latest commit)
+    if (isOnLatest) {
+      choices.push({
+        name: `${chalk.bold.red('🚀')}  Push Changes`,
+        value: 'publish',
+        description: 'Commit and push your local AI changes',
+      });
+    }
   }
 
   choices.push(new Separator());
@@ -136,22 +146,28 @@ async function showMenu() {
   while (true) {
     const config = await readConfig(cwd);
 
-    // Fetch branch count for the selected repo to decide menu visibility
+    // Fetch branch count and latest commit status for the selected repo
     let branchCount = 0;
+    let isOnLatest = false;
     const repo = config ? getSelectedRepo(config) : null;
     if (repo) {
+      const gitManager = new GitManager(cwd);
       try {
-        const gitManager = new GitManager(cwd);
         const branches = await gitManager.getRemoteBranches(repo.url);
         branchCount = branches.length;
       } catch {
         branchCount = 1;
       }
+      try {
+        isOnLatest = await gitManager.isOnLatestCommit(repo.url, repo.currentBranch, repo.currentVersion);
+      } catch {
+        isOnLatest = false;
+      }
     }
 
     printHeader(config);
 
-    const choices = buildMenuChoices(config, branchCount);
+    const choices = buildMenuChoices(config, branchCount, isOnLatest);
 
     try {
       const action = await select({
@@ -178,6 +194,9 @@ async function showMenu() {
           break;
         case 'switch-version':
           await switchVersionCommand(cwd);
+          break;
+        case 'publish':
+          await publishCommand(cwd);
           break;
         case 'exit':
           console.clear();

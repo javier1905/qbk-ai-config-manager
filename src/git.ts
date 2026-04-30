@@ -171,6 +171,25 @@ export class GitManager {
     await git.checkout(commitHash);
   }
 
+  /**
+   * Check if the given short hash matches the latest commit (HEAD) of the branch.
+   */
+  async isOnLatestCommit(repoUrl: string, branch: string, currentVersion: string): Promise<boolean> {
+    if (currentVersion === 'latest') return true;
+    try {
+      const refs = await simpleGit().listRemote(['--heads', repoUrl]);
+      for (const line of refs.split('\n')) {
+        if (line.includes(`refs/heads/${branch}`)) {
+          const remoteHash = line.split('\t')[0].trim();
+          return remoteHash.startsWith(currentVersion);
+        }
+      }
+      return true; // fallback
+    } catch {
+      return true;
+    }
+  }
+
   // ─── Change Detection ───────────────────────────────────────
 
   /**
