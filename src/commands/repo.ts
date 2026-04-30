@@ -1,10 +1,10 @@
-import { input, select } from '@inquirer/prompts';
+import { input, select, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import { readConfig, writeConfig, repoNameFromUrl, getSelectedRepo } from '../config.js';
 import type { AiConfig, RepoEntry } from '../config.js';
 import { GitManager } from '../git.js';
-import { logSuccess, logError, logInfo, logSuccessBox, logErrorBox, ensureGitignore } from '../utils.js';
+import { logSuccess, logError, logInfo, logSuccessBox, logErrorBox, ensureGitignore, logWarning, logSkull } from '../utils.js';
 import { handlePendingChanges } from './shared.js';
 
 /**
@@ -172,78 +172,168 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
 
   const currentRepo = getSelectedRepo(config);
 
-  const choices = config.repositories.map((repo, index) => ({
-    name: `${index === config.selectedRepoIndex ? chalk.green('● ') : '  '}${repo.name} ${chalk.dim(`(${repo.currentBranch})`)}`,
-    value: index,
-    description: repo.url,
-  }));
+  let selectedIndex: number | null = null;
 
-  let selectedIndex: number;
-  try {
-    selectedIndex = await select({
-      message: 'Select a repository:',
-      choices,
-    });
-  } catch {
-    return; // Escape pressed
-  }
+  while (selectedIndex === null) {
+    const choices = config.repositories.map((repo, index) => ({
+      name: `${index === config.selectedRepoIndex ? chalk.green('● ') : '  '}${repo.name} ${chalk.dim(`(${repo.currentBranch})`)}`,
+      value: index,
+      description: repo.url,
+    }));
 
-  if (selectedIndex === config.selectedRepoIndex) {
-    logInfo('Already on this repository.');
-    return;
-  }
-
-  const gitManager = new GitManager(cwd);
-  const targetRepo = config.repositories[selectedIndex];
-
-  // Handle pending changes on current repo
-  if (currentRepo) {
-    const spinner = ora('Checking for local changes...').start();
     try {
-      const git = await gitManager.setupTempRepo(currentRepo.url, currentRepo.currentBranch);
-      spinner.stop();
+      selectedIndex = await select({
+        message: 'Select a repository:',
+        choices,
+      });
+    } catch {
+      return; // Escape pressed
+    }
 
-      const result = await handlePendingChanges(gitManager, git, currentRepo.currentVersion);
-      if (result === 'cancelled') {
+    if (selectedIndex === config.selectedRepoIndex) {
+      logInfo('Already on this repository.');
+      return;
+    }
+
+    const gitManager = new GitManager(cwd);
+    const targetRepo = config.repositories[selectedIndex];
+
+    // ─── Safety Check on Current Repo ───
+    if (currentRepo) {
+      const spinnerStatus = ora('Checking current repository status...').start();
+      try {
+        const git = await gitManager.setupTempRepo(currentRepo.url, currentRepo.currentBranch);
+        const isOnLatest = await gitManager.isOnLatestCommit(currentRepo.url, currentRepo.currentBranch, currentRepo.currentVersion);
+        spinnerStatus.stop();
+
+        // CASE A: Not on latest commit
+        if (!isOnLatest) {
+          logSkull();
+          logWarning('You are not on the latest commit of the current repository.');
+          logInfo('Any local changes you may have will be discarded.');
+
+          let shouldContinue: boolean;
+          try {
+            shouldContinue = await confirm({
+              message: 'Do you want to discard changes and switch repository?',
+              default: false,
+            });
+          } catch {
+            await gitManager.cleanTempRepo();
+            return;
+          }
+
+          if (!shouldContinue) {
+            selectedIndex = null;
+            await gitManager.cleanTempRepo();
+            continue;
+          }
+          // Discard is implicit as we don't save. We'll proceed to switch.
+        } 
+        else {
+          // CASE B: On latest commit → check for changes
+          const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion);
+          
+          if (hasChanges) {
+            logSkull();
+            logWarning('You have local changes in the current repository:');
+            for (const f of files) {
+              console.log(`    ${chalk.yellow('→')} ${f}`);
+            }
+
+            let action: string;
+            try {
+              action = await select({
+                message: 'What do you want to do with your local changes?',
+                choices: [
+                  { name: `${chalk.green('💾')}  Save changes (commit & push)`, value: 'save' },
+                  { name: `${chalk.red('🗑')}   Discard changes`, value: 'discard' },
+                ],
+              });
+            } catch {
+              await gitManager.cleanTempRepo();
+              return;
+            }
+
+            if (action === 'save') {
+              const commitMessage = await input({
+                message: 'Enter a commit message:',
+                default: 'chore: save local AI config changes before switching repo',
+              });
+
+              let pushSuccess = false;
+              while (!pushSuccess) {
+                const spinnerSave = ora('Saving changes...').start();
+                try {
+                  await gitManager.commitAndPush(git, commitMessage);
+                  spinnerSave.succeed('Changes saved and pushed.');
+                  pushSuccess = true;
+                } catch (err: any) {
+                  spinnerSave.fail('Failed to push changes.');
+                  logError(err.message);
+                  logWarning('There may be conflicts with the remote repository.');
+                  
+                  let resolved: boolean;
+                  try {
+                    resolved = await confirm({
+                      message: 'Have you resolved the conflicts manually? Confirm to try again.',
+                      default: true,
+                    });
+                  } catch {
+                    await gitManager.cleanTempRepo();
+                    return;
+                  }
+
+                  if (!resolved) {
+                    logInfo('Operation cancelled.');
+                    await gitManager.cleanTempRepo();
+                    return;
+                  }
+                }
+              }
+            } else {
+              logInfo('Local changes discarded.');
+            }
+          }
+        }
+        await gitManager.cleanTempRepo();
+      } catch (err: any) {
+        spinnerStatus.stop();
+        logError(err.message);
         await gitManager.cleanTempRepo();
         return;
       }
+    }
+
+    // ─── Perform Switch ───
+    const spinnerSwitch = ora(`Switching to "${targetRepo.name}"...`).start();
+    try {
+      const git = await gitManager.setupTempRepo(targetRepo.url, targetRepo.defaultBranch);
+
+      // Update version to latest of target repo
+      let headCommit = 'latest';
+      try {
+        headCommit = (await git.revparse(['HEAD'])).trim().substring(0, 7);
+      } catch { /* fallback */ }
+
+      config.selectedRepoIndex = selectedIndex;
+      // We reset branch and version to default/latest of the target repo when switching
+      config.repositories[selectedIndex].currentBranch = targetRepo.defaultBranch;
+      config.repositories[selectedIndex].currentVersion = headCommit;
+
+      await gitManager.applyToWorkspace();
+      await writeConfig(cwd, config);
       await gitManager.cleanTempRepo();
+      spinnerSwitch.stop();
+
+      logSuccessBox(
+        'Repository Switched',
+        `Now using "${targetRepo.name}" on branch "${targetRepo.defaultBranch}" (${headCommit}).`
+      );
     } catch (err: any) {
-      spinner.stop();
+      spinnerSwitch.fail('Failed to switch repository.');
       logError(err.message);
       await gitManager.cleanTempRepo();
-      return;
     }
-  }
-
-  // Switch to new repo on its default branch
-  const spinner = ora(`Switching to "${targetRepo.name}"...`).start();
-  try {
-    const git = await gitManager.setupTempRepo(targetRepo.url, targetRepo.defaultBranch);
-
-    // Update version
-    let headCommit = 'latest';
-    try {
-      headCommit = (await git.revparse(['HEAD'])).trim().substring(0, 7);
-    } catch { /* fallback */ }
-
-    config.selectedRepoIndex = selectedIndex;
-    config.repositories[selectedIndex].currentBranch = targetRepo.defaultBranch;
-    config.repositories[selectedIndex].currentVersion = headCommit;
-
-    await gitManager.applyToWorkspace();
-    await writeConfig(cwd, config);
-    await gitManager.cleanTempRepo();
-    spinner.stop();
-
-    logSuccessBox(
-      'Repository Switched',
-      `Now using "${targetRepo.name}" on branch "${targetRepo.defaultBranch}".`
-    );
-  } catch (err: any) {
-    spinner.fail('Failed to switch repository.');
-    logError(err.message);
-    await gitManager.cleanTempRepo();
   }
 }
