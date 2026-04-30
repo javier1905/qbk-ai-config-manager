@@ -1,4 +1,4 @@
-import { input } from '@inquirer/prompts';
+import { input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import { readConfig, writeConfig, getSelectedRepo } from '../config.js';
@@ -58,28 +58,47 @@ export async function publishCommand(cwd: string): Promise<void> {
       return; // Escape pressed
     }
 
-    const spinnerPush = ora('Pushing changes to remote...').start();
-
-    try {
-      await gitManager.commitAndPush(git, message);
-
-      // Update the current version to the new HEAD
-      let newHead = 'latest';
+    let success = false;
+    while (!success) {
+      const spinnerPush = ora('Pushing changes to remote...').start();
       try {
-        newHead = (await git.revparse(['HEAD'])).trim().substring(0, 7);
-      } catch { /* fallback */ }
+        await gitManager.commitAndPush(git, message);
 
-      currentRepo.currentVersion = newHead;
-      await writeConfig(cwd, config);
-      await gitManager.cleanTempRepo();
-      spinnerPush.stop();
+        // Update the current version to the new HEAD
+        let newHead = 'latest';
+        try {
+          newHead = (await git.revparse(['HEAD'])).trim().substring(0, 7);
+        } catch { /* fallback */ }
 
-      logSuccessBox('Changes Published', `Your changes have been pushed to "${currentRepo.currentBranch}" (${newHead}).`);
-    } catch (err: any) {
-      spinnerPush.fail('Failed to push changes.');
-      logError(err.message);
-      logWarning('There may be conflicts with the remote. Please resolve them manually and try again.');
-      await gitManager.cleanTempRepo();
+        currentRepo.currentVersion = newHead;
+        await writeConfig(cwd, config);
+        await gitManager.cleanTempRepo();
+        spinnerPush.stop();
+
+        logSuccessBox('Changes Published', `Your changes have been pushed to "${currentRepo.currentBranch}" (${newHead}).`);
+        success = true;
+      } catch (err: any) {
+        spinnerPush.fail('Failed to push changes.');
+        logError(err.message);
+        logWarning('There may be conflicts with the remote repository.');
+        
+        let resolved: boolean;
+        try {
+          resolved = await confirm({
+            message: 'Have you resolved the conflicts manually in your files? Confirm to try pushing again.',
+            default: true,
+          });
+        } catch {
+          await gitManager.cleanTempRepo();
+          return; // Escape
+        }
+
+        if (!resolved) {
+          logInfo('Operation cancelled.');
+          await gitManager.cleanTempRepo();
+          return;
+        }
+      }
     }
   } catch (err: any) {
     spinner.stop();
