@@ -51,6 +51,24 @@ export function logErrorBox(title: string, detail: string) {
   console.log(`  ${line}\n`);
 }
 
+export function logSkull() {
+  const skull = `
+       ${chalk.red.bold('______')}
+    ${chalk.red.bold('.-"      "-.')}
+   ${chalk.red.bold('/            \\')}
+  ${chalk.red.bold('|              |')}
+  ${chalk.red.bold('|,  .-.  .-.  ,|')}
+  ${chalk.red.bold('| )(__/  \\__)( |')}
+  ${chalk.red.bold('|/     /\\     \\|')}
+  ${chalk.red.bold('(_     ^^     _)')}
+   ${chalk.red.bold('\\__|IIIIII|__/')}
+    ${chalk.red.bold('| \\IIIIII/ |')}
+    ${chalk.red.bold('\\          /')}
+     ${chalk.red.bold('`--------`')}
+  `;
+  console.log(skull);
+}
+
 // ─── File Operations ──────────────────────────────────────────
 
 export async function copyAiFiles(srcDir: string, destDir: string): Promise<void> {

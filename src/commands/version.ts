@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { readConfig, writeConfig, getSelectedRepo } from '../config.js';
 import { GitManager } from '../git.js';
-import { logSuccess, logError, logInfo, logSuccessBox, logWarning } from '../utils.js';
+import { logSuccess, logError, logInfo, logSuccessBox, logWarning, logSkull } from '../utils.js';
 
 /**
  * Command 6: Switch version (commit).
@@ -85,6 +85,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
       // ─── Case A: NOT on the latest commit ───
       if (!isOnLatest) {
+        logSkull();
         logWarning('You are not on the latest commit of this branch.');
         logInfo('Any local changes you may have will be discarded because you cannot push from an old version.');
 
@@ -139,6 +140,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
       }
 
       // Has changes → ask save or discard
+      logSkull();
       logWarning('You have local changes that differ from the current version:');
       for (const f of files) {
         console.log(`    ${chalk.yellow('→')} ${f}`);

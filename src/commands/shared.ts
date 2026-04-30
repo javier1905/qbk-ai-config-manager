@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import type { SimpleGit } from 'simple-git';
 import { GitManager } from '../git.js';
-import { logInfo, logSuccess, logError, logWarning } from '../utils.js';
+import { logInfo, logSuccess, logError, logWarning, logSkull } from '../utils.js';
 
 /**
  * Handles the "Save or Discard" flow that is shared across
@@ -22,6 +22,7 @@ export async function handlePendingChanges(
     return 'saved'; // Nothing to handle
   }
 
+  logSkull();
   logWarning('You have local changes that differ from the current version:');
   for (const f of files) {
     console.log(`    ${chalk.yellow('→')} ${f}`);
