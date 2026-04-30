@@ -3,16 +3,10 @@ import { existsSync } from 'fs';
 import path from 'path';
 import chalk from 'chalk';
 
-export const AI_FILES = [
-  '.agents',
-  '.claude',
-  'AGENTS.md',
-  'CLAUDE.md'
-];
+export const AI_FILES = ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md'];
 
 export const CONFIG_FILE = '.ai-config.json';
 export const TEMP_DIR = '.qbk-temp';
-export const PROFILES_FILE = '.qbk-profiles.json';
 
 export async function checkFileExists(filePath: string): Promise<boolean> {
   try {
@@ -23,27 +17,46 @@ export async function checkFileExists(filePath: string): Promise<boolean> {
   }
 }
 
+// ─── Logging ──────────────────────────────────────────────────
+
 export function logSuccess(message: string) {
-  console.log(chalk.green('✔') + ' ' + message);
+  console.log(`\n  ${chalk.green.bold('✔')}  ${chalk.white.bold(message)}`);
 }
 
 export function logInfo(message: string) {
-  console.log(chalk.blue('ℹ') + ' ' + message);
+  console.log(`\n  ${chalk.blue.bold('ℹ')}  ${chalk.white(message)}`);
 }
 
 export function logError(message: string) {
-  console.log(chalk.red('✖') + ' ' + message);
+  console.log(`\n  ${chalk.red.bold('✖')}  ${chalk.red.bold(message)}`);
 }
 
 export function logWarning(message: string) {
-  console.log(chalk.yellow('⚠') + ' ' + message);
+  console.log(`\n  ${chalk.yellow.bold('⚠')}  ${chalk.yellow(message)}`);
 }
+
+export function logSuccessBox(title: string, detail: string) {
+  const line = chalk.gray('──────────────────────────────────────────────────────');
+  console.log(`\n  ${line}`);
+  console.log(`  ${chalk.green.bold('✔ SUCCESS')}  ${chalk.white.bold(title)}`);
+  console.log(`  ${chalk.gray(detail)}`);
+  console.log(`  ${line}\n`);
+}
+
+export function logErrorBox(title: string, detail: string) {
+  const line = chalk.gray('──────────────────────────────────────────────────────');
+  console.log(`\n  ${line}`);
+  console.log(`  ${chalk.red.bold('✖ ERROR')}  ${chalk.red.bold(title)}`);
+  console.log(`  ${chalk.gray(detail)}`);
+  console.log(`  ${line}\n`);
+}
+
+// ─── File Operations ──────────────────────────────────────────
 
 export async function copyAiFiles(srcDir: string, destDir: string): Promise<void> {
   for (const item of AI_FILES) {
     const srcPath = path.join(srcDir, item);
     const destPath = path.join(destDir, item);
-    
     if (existsSync(srcPath)) {
       await fs.rm(destPath, { recursive: true, force: true }).catch(() => {});
       await fs.cp(srcPath, destPath, { recursive: true, force: true, dereference: false });
@@ -51,23 +64,36 @@ export async function copyAiFiles(srcDir: string, destDir: string): Promise<void
   }
 }
 
-export async function checkLocalChanges(destDir: string): Promise<boolean> {
-  // A simplified check if there are any git modifications to these specific AI files
-  // For the CLI, we could rely on simple-git in the destDir to check `git status --porcelain` on these files
-  // That will be handled in git.ts
-  return false;
-}
-
-export async function validateStructure(dir: string): Promise<void> {
-  const missing = [];
+export async function validateStructure(dir: string): Promise<boolean> {
   for (const item of AI_FILES) {
     const itemPath = path.join(dir, item);
     if (!(await checkFileExists(itemPath))) {
-      missing.push(item);
+      return false;
     }
   }
-  
-  if (missing.length > 0) {
-    throw new Error(`Invalid AI config repository structure. Missing: ${missing.join(', ')}`);
+  return true;
+}
+
+// ─── .gitignore Management ───────────────────────────────────
+
+export async function ensureGitignore(cwd: string): Promise<void> {
+  const gitignorePath = path.join(cwd, '.gitignore');
+  let content = '';
+  if (await checkFileExists(gitignorePath)) {
+    content = await fs.readFile(gitignorePath, 'utf8');
+  }
+
+  const filesToIgnore = [...AI_FILES, CONFIG_FILE, TEMP_DIR];
+  let appended = false;
+  for (const file of filesToIgnore) {
+    if (!content.includes(file)) {
+      content += `\n${file}`;
+      appended = true;
+    }
+  }
+
+  if (appended) {
+    await fs.writeFile(gitignorePath, content, 'utf8');
+    logSuccess('Updated .gitignore to ignore AI configuration files.');
   }
 }

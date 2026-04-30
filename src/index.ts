@@ -1,245 +1,208 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
-import { select, Separator, input } from "@inquirer/prompts";
-import { initCommand } from "./commands/init.js";
-import { syncCommand } from "./commands/sync.js";
-import { statusCommand } from "./commands/status.js";
-import { versionsCommand } from "./commands/versions.js";
-import { useCommand } from "./commands/use.js";
-import {
-  profileCreateCommand,
-  profileUseCommand,
-} from "./commands/profiles.js";
-import { publishCommand } from "./commands/publish.js";
-import { readConfig } from "./config.js";
-import chalk from "chalk";
-import readline from "readline";
+import { select, Separator, input } from '@inquirer/prompts';
+import { readConfig, getSelectedRepo } from './config.js';
+import type { AiConfig } from './config.js';
+import { addRepoCommand, switchRepoCommand } from './commands/repo.js';
+import { switchProfileCommand, addProfileCommand, removeProfileCommand } from './commands/profile.js';
+import { switchVersionCommand } from './commands/version.js';
+import { GitManager } from './git.js';
+import chalk from 'chalk';
+import readline from 'readline';
 
-const program = new Command();
 const cwd = process.cwd();
 
-// Setup global keypress listener for Escape
+// ─── Global Escape Key Listener ───────────────────────────────
 if (process.stdin.isTTY) {
   readline.emitKeypressEvents(process.stdin);
   process.stdin.setRawMode(true);
-  process.stdin.on("keypress", (str, key) => {
-    if (key.name === "escape") {
+  process.stdin.on('keypress', (_str, key) => {
+    if (key.name === 'escape') {
       console.clear();
-      console.log(chalk.gray("\n  Goodbye! 👋\n"));
+      console.log(chalk.gray('\n  Goodbye! 👋\n'));
       process.exit(0);
     }
-    // Handle Ctrl+C manually since raw mode is on
-    if (key.ctrl && key.name === "c") {
+    if (key.ctrl && key.name === 'c') {
       console.clear();
       process.exit(0);
     }
   });
 }
 
-program.name("qbk-ia").description("AI Config Manager").version("1.1.0");
+// ─── Header UI ────────────────────────────────────────────────
 
-// Header UI (Big Banner Style)
-function printHeader(config: any) {
+function printHeader(config: AiConfig | null) {
   console.clear();
 
   const bigLogo = `
-  ${chalk.white.bold(" ██████   ██    ██  ██████   ██  ██   ██")}
-  ${chalk.white.bold("██    ██  ██    ██  ██   ██  ██  ██  ██")}
-  ${chalk.white.bold("██    ██  ██    ██  ██████   ██  █████")}
-  ${chalk.white.bold("██ ▄▄ ██  ██    ██  ██   ██  ██  ██  ██")}
-  ${chalk.white.bold(" ██████    ██████   ██████   ██  ██   ██")}
-  ${chalk.white.bold("    ▀▀")}
-  ${chalk.hex("#FF8C00").bold("       A I   C O N F I G   M A N A G E R")}
+  ${chalk.white.bold(' ██████   ██    ██  ██████   ██  ██   ██')}
+  ${chalk.white.bold('██    ██  ██    ██  ██   ██  ██  ██  ██')}
+  ${chalk.white.bold('██    ██  ██    ██  ██████   ██  █████')}
+  ${chalk.white.bold('██ ▄▄ ██  ██    ██  ██   ██  ██  ██  ██')}
+  ${chalk.white.bold(' ██████    ██████   ██████   ██  ██   ██')}
+  ${chalk.white.bold('    ▀▀')}
+  ${chalk.hex('#FF8C00').bold('       A I   C O N F I G   M A N A G E R')}
   `;
 
-  const infoLines = [
-    `${chalk.green.bold("Project:")}  ${chalk.white("qbk-ia AI Config Manager")}`,
-    `${chalk.green.bold("Repo:")}     ${config ? chalk.blue(config.repo) : chalk.dim("None")}`,
-    `${chalk.green.bold("Branch:")}   ${config ? chalk.yellow(config.branch || "master") : chalk.dim("N/A")}`,
-    `${chalk.green.bold("Status:")}   ${config ? chalk.green("Linked") : chalk.red("Not Initialized")}`,
-    `${chalk.green.bold("CLI Ver:")}  ${chalk.white("1.1.0")}`,
-  ];
-
   console.log(bigLogo);
-  console.log(
-    `  ${chalk.bgBlack("  ")}${chalk.bgRed("  ")}${chalk.bgGreen("  ")}${chalk.bgYellow("  ")}${chalk.bgBlue("  ")}${chalk.bgMagenta("  ")}${chalk.bgCyan("  ")}${chalk.bgWhite("  ")}`,
-  );
-  console.log(
-    `\n${chalk.gray("──────────────────────────────────────────────────────")}`,
-  );
+  console.log(`  ${chalk.bgBlack('  ')}${chalk.bgRed('  ')}${chalk.bgGreen('  ')}${chalk.bgYellow('  ')}${chalk.bgBlue('  ')}${chalk.bgMagenta('  ')}${chalk.bgCyan('  ')}${chalk.bgWhite('  ')}`);
+  console.log(`\n${chalk.gray('──────────────────────────────────────────────────────')}`);
 
-  infoLines.forEach((line) => console.log(`  ${line}`));
+  // Sub-header with current repo info
+  const repo = config ? getSelectedRepo(config) : null;
 
-  console.log(
-    `${chalk.gray("──────────────────────────────────────────────────────")}\n`,
-  );
+  if (repo) {
+    console.log(`  ${chalk.green.bold('Repo:')}     ${chalk.blue(repo.name)} ${chalk.dim(`(${repo.url})`)}`);
+    console.log(`  ${chalk.green.bold('Profile:')}  ${chalk.yellow(repo.currentBranch)}${repo.currentBranch === repo.defaultBranch ? chalk.dim(' (default)') : ''}`);
+    console.log(`  ${chalk.green.bold('Version:')}  ${chalk.cyan(repo.currentVersion)}`);
+  } else {
+    console.log(`  ${chalk.dim('No repository configured. Add one to get started.')}`);
+  }
+
+  console.log(`${chalk.gray('──────────────────────────────────────────────────────')}\n`);
 }
 
-program
-  .command("init")
-  .description("Initialize AI configuration")
-  .action(() => initCommand(cwd));
+// ─── Menu Builder ─────────────────────────────────────────────
 
-program
-  .command("sync")
-  .description("Synchronize AI configuration from remote")
-  .action(() => syncCommand(cwd));
+function buildMenuChoices(config: AiConfig | null, branchCount: number) {
+  const hasRepo = config !== null && config.repositories.length > 0;
+  const hasMultipleRepos = config !== null && config.repositories.length > 1;
+  const hasSelectedRepo = config !== null && config.selectedRepoIndex >= 0;
+  const hasMultipleProfiles = branchCount > 1;
 
-program
-  .command("status")
-  .description("Check status of local AI configuration")
-  .action(() => statusCommand(cwd));
+  const choices: any[] = [];
 
-program
-  .command("versions")
-  .description("List available versions/tags/commits")
-  .action(() => versionsCommand(cwd));
+  // 1. Add Repository (always visible)
+  choices.push({
+    name: `${chalk.bold.cyan('➕')}  Add Repository`,
+    value: 'add-repo',
+    description: 'Connect a new Git repository',
+  });
 
-program
-  .command("use")
-  .description("Use a specific version")
-  .argument("[version]", "Version to use")
-  .action((version) => useCommand(cwd, version));
+  // 2. Switch Repository (visible if > 1 repos)
+  if (hasMultipleRepos) {
+    choices.push({
+      name: `${chalk.bold.green('🔄')}  Switch Repository`,
+      value: 'switch-repo',
+      description: 'Change to a different repository',
+    });
+  }
 
-const profileCmd = program.command("profile").description("Manage profiles");
+  if (hasSelectedRepo) {
+    choices.push(new Separator());
 
-profileCmd
-  .command("create")
-  .description("Create a new profile")
-  .action(() => profileCreateCommand(cwd));
+    // 3. Switch Profile (visible if > 1 profile)
+    if (hasMultipleProfiles) {
+      choices.push({
+        name: `${chalk.bold.magenta('⇋')}   Switch Profile`,
+        value: 'switch-profile',
+        description: 'Change to a different branch',
+      });
+    }
 
-profileCmd
-  .command("use")
-  .description("Use an existing profile")
-  .argument("[name]", "Profile name to use")
-  .action((name) => profileUseCommand(cwd, name));
+    // 4. Add Profile (always if repo selected)
+    choices.push({
+      name: `${chalk.bold.yellow('➕')}  Add Profile`,
+      value: 'add-profile',
+      description: 'Create a new branch',
+    });
 
-program
-  .command("publish")
-  .description("Publish local changes to the AI repository")
-  .action(() => publishCommand(cwd));
+    // 5. Remove Profile (visible if > 1 profile)
+    if (hasMultipleProfiles) {
+      choices.push({
+        name: `${chalk.bold.red('🗑')}   Remove Profile`,
+        value: 'remove-profile',
+        description: 'Delete a branch',
+      });
+    }
 
-// Interactive Menu
+    // 6. Switch Version (always if repo selected)
+    choices.push({
+      name: `${chalk.bold.blue('📋')}  Switch Version`,
+      value: 'switch-version',
+      description: 'Checkout a specific commit',
+    });
+  }
+
+  choices.push(new Separator());
+  choices.push({ name: `   Exit`, value: 'exit' });
+
+  return choices;
+}
+
+// ─── Main Loop ────────────────────────────────────────────────
+
 async function showMenu() {
   while (true) {
     const config = await readConfig(cwd);
-    const isConfigured = config !== null;
+
+    // Fetch branch count for the selected repo to decide menu visibility
+    let branchCount = 0;
+    const repo = config ? getSelectedRepo(config) : null;
+    if (repo) {
+      try {
+        const gitManager = new GitManager(cwd);
+        const branches = await gitManager.getRemoteBranches(repo.url);
+        branchCount = branches.length;
+      } catch {
+        branchCount = 1;
+      }
+    }
 
     printHeader(config);
 
-    const choices = [
-      {
-        name: `${chalk.bold.cyan("➜")}  Initialize Project`,
-        value: "init",
-        description: "Connect to a Git repository and setup structure",
-      },
-      new Separator(),
-      {
-        name: `${chalk.bold.green("↻")}  Sync Configuration`,
-        value: "sync",
-        disabled: !isConfigured ? chalk.dim("(Requires Init)") : false,
-        description: "Pull latest AI files from remote",
-      },
-      {
-        name: `${chalk.bold.blue("ℹ")}  System Status`,
-        value: "status",
-        disabled: !isConfigured ? chalk.dim("(Requires Init)") : false,
-        description: "Check for local changes and current version",
-      },
-      {
-        name: `${chalk.bold.magenta("⇋")}  Switch Version`,
-        value: "use",
-        disabled: !isConfigured ? chalk.dim("(Requires Init)") : false,
-        description: "Switch between commits, tags or branches",
-      },
-      {
-        name: `${chalk.bold.yellow("☰")}  View History`,
-        value: "versions",
-        disabled: !isConfigured ? chalk.dim("(Requires Init)") : false,
-        description: "List all available versions in the repo",
-      },
-      {
-        name: `${chalk.bold.white("👤")}  Manage Profiles`,
-        value: "profiles",
-        disabled: !isConfigured ? chalk.dim("(Requires Init)") : false,
-        description: "Create or switch between project profiles",
-      },
-      {
-        name: `${chalk.bold.red("🚀")}  Publish Changes`,
-        value: "publish",
-        disabled: !isConfigured ? chalk.dim("(Requires Init)") : false,
-        description: "Commit and push your local AI changes",
-      },
-      new Separator(),
-      { name: `   Exit`, value: "exit" },
-    ];
+    const choices = buildMenuChoices(config, branchCount);
 
     try {
       const action = await select({
-        message: "What would you like to do?",
+        message: 'What would you like to do?',
         choices,
         pageSize: 12,
       });
 
       switch (action) {
-        case "init":
-          await initCommand(cwd);
+        case 'add-repo':
+          await addRepoCommand(cwd);
           break;
-        case "sync":
-          await syncCommand(cwd);
+        case 'switch-repo':
+          await switchRepoCommand(cwd);
           break;
-        case "status":
-          await statusCommand(cwd);
+        case 'switch-profile':
+          await switchProfileCommand(cwd);
           break;
-        case "use":
-          await useCommand(cwd);
+        case 'add-profile':
+          await addProfileCommand(cwd);
           break;
-        case "versions":
-          await versionsCommand(cwd);
+        case 'remove-profile':
+          await removeProfileCommand(cwd);
           break;
-        case "profiles":
-          const profileAction = await select({
-            message: "Profile actions:",
-            choices: [
-              { name: "Create New Profile", value: "create" },
-              { name: "Switch Profile", value: "use" },
-              { name: "Back to Main Menu", value: "back" },
-            ],
-          });
-          if (profileAction === "create") await profileCreateCommand(cwd);
-          if (profileAction === "use") await profileUseCommand(cwd);
+        case 'switch-version':
+          await switchVersionCommand(cwd);
           break;
-        case "publish":
-          await publishCommand(cwd);
-          break;
-        case "exit":
+        case 'exit':
           console.clear();
-          console.log(chalk.gray("\n  Goodbye! 👋\n"));
+          console.log(chalk.gray('\n  Goodbye! 👋\n'));
           process.exit(0);
       }
 
-      if (action !== "exit") {
-        await input({ message: chalk.dim("\nPress Enter to continue...") });
+      if (action !== 'exit') {
+        await input({ message: chalk.dim('\nPress Enter to continue...') });
       }
-    } catch (err: any) {
-      // If user cancelled or pressed escape
+    } catch {
+      // User pressed Escape or Ctrl+C
       console.clear();
-      console.log(chalk.gray("\n  Goodbye! 👋\n"));
+      console.log(chalk.gray('\n  Goodbye! 👋\n'));
       process.exit(0);
     }
   }
 }
 
-// Parse args or show menu if none
-if (process.argv.length > 2) {
-  program.parse(process.argv);
-} else {
-  showMenu().catch((err) => {
-    if (err.message && err.message.includes("User force closed")) {
-      process.exit(0);
-    }
-    console.error(err);
-    process.exit(1);
-  });
-}
+// ─── Entry Point ──────────────────────────────────────────────
+
+showMenu().catch(err => {
+  if (err.message?.includes('User force closed')) {
+    process.exit(0);
+  }
+  console.error(err);
+  process.exit(1);
+});
