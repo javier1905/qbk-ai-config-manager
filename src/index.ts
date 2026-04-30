@@ -32,7 +32,7 @@ if (process.stdin.isTTY) {
 
 // ─── Header UI ────────────────────────────────────────────────
 
-function printHeader(config: AiConfig | null) {
+function printHeader(config: AiConfig | null, isOnLatest: boolean = false, currentMessage: string = '') {
   console.clear();
 
   const bigLogo = `
@@ -55,7 +55,9 @@ function printHeader(config: AiConfig | null) {
   if (repo) {
     console.log(`  ${chalk.green.bold('Repo:')}     ${chalk.blue(repo.name)} ${chalk.dim(`(${repo.url})`)}`);
     console.log(`  ${chalk.green.bold('Profile:')}  ${chalk.yellow(repo.currentBranch)}${repo.currentBranch === repo.defaultBranch ? chalk.dim(' (default)') : ''}`);
-    console.log(`  ${chalk.green.bold('Version:')}  ${chalk.cyan(repo.currentVersion)}`);
+    const headMarker = isOnLatest ? ` ${chalk.green.bold('(HEAD)')}` : '';
+    const msg = currentMessage ? ` ${chalk.dim(`- ${currentMessage}`)}` : '';
+    console.log(`  ${chalk.green.bold('Version:')}  ${chalk.cyan(repo.currentVersion)}${headMarker}${msg}`);
   } else {
     console.log(`  ${chalk.dim('No repository configured. Add one to get started.')}`);
   }
@@ -149,6 +151,7 @@ async function showMenu() {
     // Fetch branch count and latest commit status for the selected repo
     let branchCount = 0;
     let isOnLatest = false;
+    let currentMessage = '';
     const repo = config ? getSelectedRepo(config) : null;
     if (repo) {
       const gitManager = new GitManager(cwd);
@@ -160,12 +163,24 @@ async function showMenu() {
       }
       try {
         isOnLatest = await gitManager.isOnLatestCommit(repo.url, repo.currentBranch, repo.currentVersion);
+        
+        // Fetch commit message for current version
+        const git = await gitManager.setupTempRepo(repo.url, repo.currentBranch);
+        const commits = await gitManager.getCommits(git, 50);
+        const currentCommit = commits.find(c => 
+          c.hash.substring(0, 7) === repo.currentVersion || 
+          c.hash.startsWith(repo.currentVersion)
+        );
+        if (currentCommit) {
+          currentMessage = currentCommit.message;
+        }
+        await gitManager.cleanTempRepo();
       } catch {
         isOnLatest = false;
       }
     }
 
-    printHeader(config);
+    printHeader(config, isOnLatest, currentMessage);
 
     const choices = buildMenuChoices(config, branchCount, isOnLatest);
 
