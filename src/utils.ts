@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import chalk from 'chalk';
+import { input, select, confirm } from '@inquirer/prompts';
 
 export const AI_FILES = ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md'];
 
@@ -20,19 +21,19 @@ export async function checkFileExists(filePath: string): Promise<boolean> {
 // ─── Logging ──────────────────────────────────────────────────
 
 export function logSuccess(message: string) {
-  console.log(`\n  ${chalk.green.bold('✔')}  ${chalk.white.bold(message)}`);
+  console.log(`  ${chalk.green.bold('✔')}  ${chalk.white.bold(message)}`);
 }
 
 export function logInfo(message: string) {
-  console.log(`\n  ${chalk.blue.bold('ℹ')}  ${chalk.white(message)}`);
+  console.log(`  ${chalk.blue.bold('ℹ')}  ${chalk.white(message)}`);
 }
 
 export function logError(message: string) {
-  console.log(`\n  ${chalk.red.bold('✖')}  ${chalk.red.bold(message)}`);
+  console.log(`  ${chalk.red.bold('✖')}  ${chalk.red.bold(message)}`);
 }
 
 export function logWarning(message: string) {
-  console.log(`\n  ${chalk.yellow.bold('⚠')}  ${chalk.yellow(message)}`);
+  console.log(`  ${chalk.yellow.bold('⚠')}  ${chalk.yellow(message)}`);
 }
 
 export function logSuccessBox(title: string, detail: string) {
@@ -67,6 +68,60 @@ export function logSkull() {
      ${chalk.red.bold('`--------`')}
   `;
   console.log(skull);
+}
+
+// ─── Interactive UI ───────────────────────────────────────────
+
+export async function qbkInput(options: {
+  message: string;
+  default?: string;
+  validate?: (value: string) => string | boolean | Promise<string | boolean>;
+  transformer?: (value: string, { isFinal }: { isFinal: boolean }) => string;
+}) {
+  return await input({
+    ...options,
+    theme: {
+      prefix: chalk.cyan('?'),
+      style: {
+        message: (text: string) => chalk.white.bold(text),
+        answer: (text: string) => chalk.cyan(text),
+        defaultAnswer: (text: string) => chalk.dim(`(${text})`),
+      },
+    },
+  });
+}
+
+export async function qbkSelect<T>(options: {
+  message: string;
+  choices: any[];
+  pageSize?: number;
+}) {
+  return await select({
+    ...options,
+    theme: {
+      prefix: chalk.magenta('?'),
+      style: {
+        message: (text: string) => chalk.white.bold(text),
+        answer: (text: string) => chalk.magenta(text),
+      },
+    },
+  });
+}
+
+export async function qbkConfirm(options: {
+  message: string;
+  default?: boolean;
+}) {
+  return await confirm({
+    ...options,
+    theme: {
+      prefix: chalk.yellow('?'),
+      style: {
+        message: (text: string) => chalk.white.bold(text),
+        answer: (text: string) => chalk.yellow(text),
+      },
+    },
+  });
 }
 
 // ─── File Operations ──────────────────────────────────────────

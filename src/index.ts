@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { select, Separator, input } from '@inquirer/prompts';
+import { Separator } from '@inquirer/prompts';
 import { readConfig, getSelectedRepo } from './config.js';
 import type { AiConfig } from './config.js';
 import { addRepoCommand, switchRepoCommand } from './commands/repo.js';
@@ -10,6 +10,7 @@ import { publishCommand } from './commands/publish.js';
 import { GitManager } from './git.js';
 import chalk from 'chalk';
 import readline from 'readline';
+import { qbkInput, qbkSelect } from './utils.js';
 
 const cwd = process.cwd();
 
@@ -185,7 +186,7 @@ async function showMenu() {
     const choices = buildMenuChoices(config, branchCount, isOnLatest);
 
     try {
-      const action = await select({
+      const action = await qbkSelect({
         message: 'What would you like to do?',
         choices,
         pageSize: 12,
@@ -220,7 +221,7 @@ async function showMenu() {
       }
 
       if (action !== 'exit') {
-        await input({ message: chalk.dim('\nPress Enter to continue...') });
+        await qbkInput({ message: chalk.dim('Press Enter to continue...') });
       }
     } catch {
       // User pressed Escape or Ctrl+C

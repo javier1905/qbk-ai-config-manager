@@ -1,9 +1,8 @@
-import { input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import { readConfig, writeConfig, getSelectedRepo } from '../config.js';
 import { GitManager } from '../git.js';
-import { logError, logInfo, logSuccessBox, logWarning } from '../utils.js';
+import { logError, logInfo, logSuccessBox, logWarning, qbkInput, qbkConfirm } from '../utils.js';
 
 /**
  * Command 7: Push local changes to the remote repository.
@@ -49,7 +48,7 @@ export async function publishCommand(cwd: string): Promise<void> {
     // Ask for commit message
     let message: string;
     try {
-      message = await input({
+      message = await qbkInput({
         message: 'Enter a commit message:',
         default: 'chore: update AI configuration',
       });
@@ -84,7 +83,7 @@ export async function publishCommand(cwd: string): Promise<void> {
         
         let resolved: boolean;
         try {
-          resolved = await confirm({
+          resolved = await qbkConfirm({
             message: 'Have you resolved the conflicts manually in your files? Confirm to try pushing again.',
             default: true,
           });

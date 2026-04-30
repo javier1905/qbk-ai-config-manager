@@ -1,9 +1,8 @@
-import { select, confirm, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import { readConfig, writeConfig, getSelectedRepo } from '../config.js';
 import { GitManager } from '../git.js';
-import { logSuccess, logError, logInfo, logSuccessBox, logWarning, logSkull } from '../utils.js';
+import { logSuccess, logError, logInfo, logSuccessBox, logWarning, logSkull, qbkInput, qbkSelect, qbkConfirm } from '../utils.js';
 
 /**
  * Command 6: Switch version (commit).
@@ -63,13 +62,18 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
       });
 
       try {
-        selectedCommit = await select({
+        selectedCommit = await qbkSelect({
           message: `Versions for profile "${currentRepo.currentBranch}":`,
           choices,
           pageSize: 15,
         });
       } catch {
         // Escape pressed → back to main menu
+        await gitManager.cleanTempRepo();
+        return;
+      }
+
+      if (selectedCommit === null) {
         await gitManager.cleanTempRepo();
         return;
       }
@@ -91,7 +95,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
         let shouldContinue: boolean;
         try {
-          shouldContinue = await confirm({
+          shouldContinue = await qbkConfirm({
             message: 'Do you want to discard local changes and switch version?',
             default: false,
           });
@@ -148,7 +152,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
       let action: string;
       try {
-        action = await select({
+        action = await qbkSelect({
           message: 'What do you want to do with your local changes?',
           choices: [
             { name: `${chalk.green('💾')}  Save changes (commit & push)`, value: 'save' },
@@ -181,7 +185,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
       // Save changes: commit & push first, then switch
       let commitMessage: string;
       try {
-        commitMessage = await input({
+        commitMessage = await qbkInput({
           message: 'Enter a commit message:',
           default: 'chore: save local AI config changes',
         });
@@ -204,7 +208,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
           
           let resolved: boolean;
           try {
-            resolved = await confirm({
+            resolved = await qbkConfirm({
               message: 'Have you resolved the conflicts manually in your files? Confirm to try pushing again.',
               default: true,
             });

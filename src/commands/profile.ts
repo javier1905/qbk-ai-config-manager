@@ -1,9 +1,8 @@
-import { select, input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import { readConfig, writeConfig, getSelectedRepo } from '../config.js';
 import { GitManager } from '../git.js';
-import { logSuccess, logError, logInfo, logSuccessBox, logErrorBox, logWarning } from '../utils.js';
+import { logSuccess, logError, logInfo, logSuccessBox, logErrorBox, logWarning, qbkInput, qbkSelect, qbkConfirm } from '../utils.js';
 import { handlePendingChanges } from './shared.js';
 
 /**
@@ -40,7 +39,7 @@ export async function switchProfileCommand(cwd: string): Promise<void> {
 
   let selectedBranch: string;
   try {
-    selectedBranch = await select({
+    selectedBranch = await qbkSelect({
       message: 'Select a profile (branch):',
       choices,
     });
@@ -119,35 +118,32 @@ export async function addProfileCommand(cwd: string): Promise<void> {
   // Get existing branches to check for duplicates
   const existingBranches = await gitManager.getRemoteBranches(currentRepo.url);
 
-  // Ask for name in a loop until valid
-  let branchName = '';
-  while (true) {
-    try {
-      branchName = await input({ message: 'Enter the new profile name (branch):' });
-    } catch {
-      return; // Escape pressed
-    }
-
-    if (!branchName.trim()) {
-      logError('Profile name cannot be empty.');
-      continue;
-    }
-
-    // Sanitize: replace spaces with hyphens
+  // Ask for name
+  let branchName: string;
+  try {
+    branchName = await qbkInput({ 
+      message: 'Enter the new profile name (branch):',
+      validate: (value) => {
+        const sanitized = value.trim().replace(/\s+/g, '-');
+        if (!sanitized) return 'Profile name cannot be empty.';
+        if (existingBranches.includes(sanitized)) return `A profile named "${sanitized}" already exists.`;
+        return true;
+      },
+      transformer: (value) => {
+        // Show the user how it will look (hyphenated)
+        return value.replace(/\s+/g, '-');
+      }
+    });
+    // Final sanitization just in case
     branchName = branchName.trim().replace(/\s+/g, '-');
-
-    if (existingBranches.includes(branchName)) {
-      logError(`A profile named "${branchName}" already exists. Please enter a different name.`);
-      continue;
-    }
-
-    break;
+  } catch {
+    return; // Escape pressed
   }
 
   // Ask: blank or from existing branch?
   let createBlank: boolean;
   try {
-    createBlank = await confirm({
+    createBlank = await qbkConfirm({
       message: 'Create a blank profile? (No = copy from an existing profile)',
       default: true,
     });
@@ -172,7 +168,7 @@ export async function addProfileCommand(cwd: string): Promise<void> {
 
       let baseBranch: string;
       try {
-        baseBranch = await select({
+        baseBranch = await qbkSelect({
           message: 'Select the base profile to copy from:',
           choices: branches.map(b => ({ name: b, value: b })),
         });
@@ -226,7 +222,7 @@ export async function removeProfileCommand(cwd: string): Promise<void> {
 
   let branchToDelete: string;
   try {
-    branchToDelete = await select({
+    branchToDelete = await qbkSelect({
       message: `Select a profile to remove ${chalk.dim('(default branch is protected)')}:`,
       choices: deletableBranches.map(b => ({
         name: `${b === currentRepo.currentBranch ? chalk.yellow('● ') : '  '}${b}`,
@@ -240,7 +236,7 @@ export async function removeProfileCommand(cwd: string): Promise<void> {
   // Confirm deletion
   let confirmed: boolean;
   try {
-    confirmed = await confirm({
+    confirmed = await qbkConfirm({
       message: `Are you sure you want to permanently delete the profile "${branchToDelete}"?`,
       default: false,
     });

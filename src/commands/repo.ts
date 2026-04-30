@@ -1,10 +1,9 @@
-import { input, select, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import { readConfig, writeConfig, repoNameFromUrl, getSelectedRepo } from '../config.js';
 import type { AiConfig, RepoEntry } from '../config.js';
 import { GitManager } from '../git.js';
-import { logSuccess, logError, logInfo, logSuccessBox, logErrorBox, ensureGitignore, logWarning, logSkull } from '../utils.js';
+import { logSuccess, logError, logInfo, logSuccessBox, logErrorBox, ensureGitignore, logWarning, logSkull, qbkInput, qbkSelect, qbkConfirm } from '../utils.js';
 import { handlePendingChanges } from './shared.js';
 
 /**
@@ -13,14 +12,12 @@ import { handlePendingChanges } from './shared.js';
 export async function addRepoCommand(cwd: string): Promise<void> {
   let repoUrl: string;
   try {
-    repoUrl = await input({ message: 'Enter the Git repository URL:' });
+    repoUrl = await qbkInput({ 
+      message: 'Enter the Git repository URL:',
+      validate: (value) => value.trim() ? true : 'Repository URL cannot be empty.'
+    });
   } catch {
     return; // Escape pressed
-  }
-
-  if (!repoUrl.trim()) {
-    logError('Repository URL cannot be empty.');
-    return;
   }
 
   const gitManager = new GitManager(cwd);
@@ -182,13 +179,15 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
     }));
 
     try {
-      selectedIndex = await select({
+      selectedIndex = await qbkSelect({
         message: 'Select a repository:',
         choices,
       });
     } catch {
       return; // Escape pressed
     }
+
+    if (selectedIndex === null) return;
 
     if (selectedIndex === config.selectedRepoIndex) {
       logInfo('Already on this repository.');
@@ -214,7 +213,7 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
 
           let shouldContinue: boolean;
           try {
-            shouldContinue = await confirm({
+            shouldContinue = await qbkConfirm({
               message: 'Do you want to discard changes and switch repository?',
               default: false,
             });
@@ -243,7 +242,7 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
 
             let action: string;
             try {
-              action = await select({
+              action = await qbkSelect({
                 message: 'What do you want to do with your local changes?',
                 choices: [
                   { name: `${chalk.green('💾')}  Save changes (commit & push)`, value: 'save' },
@@ -256,7 +255,7 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
             }
 
             if (action === 'save') {
-              const commitMessage = await input({
+              const commitMessage = await qbkInput({
                 message: 'Enter a commit message:',
                 default: 'chore: save local AI config changes before switching repo',
               });
@@ -275,7 +274,7 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
                   
                   let resolved: boolean;
                   try {
-                    resolved = await confirm({
+                    resolved = await qbkConfirm({
                       message: 'Have you resolved the conflicts manually? Confirm to try again.',
                       default: true,
                     });
