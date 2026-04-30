@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { select } from '@inquirer/prompts';
+import { select, Separator, input } from '@inquirer/prompts';
 import { initCommand } from './commands/init.js';
 import { syncCommand } from './commands/sync.js';
 import { statusCommand } from './commands/status.js';
@@ -10,14 +10,66 @@ import { useCommand } from './commands/use.js';
 import { profileCreateCommand, profileUseCommand } from './commands/profiles.js';
 import { publishCommand } from './commands/publish.js';
 import { readConfig } from './config.js';
+import chalk from 'chalk';
+import readline from 'readline';
 
 const program = new Command();
 const cwd = process.cwd();
 
+// Setup global keypress listener for Escape
+if (process.stdin.isTTY) {
+  readline.emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true);
+  process.stdin.on('keypress', (str, key) => {
+    if (key.name === 'escape') {
+      console.log(chalk.gray('\n  Goodbye! 👋\n'));
+      process.exit(0);
+    }
+    // Handle Ctrl+C manually since raw mode is on
+    if (key.ctrl && key.name === 'c') {
+      process.exit(0);
+    }
+  });
+}
+
 program
   .name('qbk-ia')
   .description('AI Config Manager')
-  .version('1.0.0');
+  .version('1.1.0');
+
+// Header UI (Neofetch Style)
+function printHeader(config: any) {
+  console.clear();
+  
+  const logoLines = [
+    '',
+    `    ${chalk.white.bold('( Q )')}`,
+    `${chalk.white.bold(' ( U ) ( B )')}`,
+    `    ${chalk.white.bold('( I )')}`,
+    `    ${chalk.white.bold('( K )')}`,
+    '',
+    `  ${chalk.bgBlack('  ')}${chalk.bgRed('  ')}${chalk.bgGreen('  ')}${chalk.bgYellow('  ')}${chalk.bgBlue('  ')}${chalk.bgMagenta('  ')}${chalk.bgCyan('  ')}${chalk.bgWhite('  ')}`
+  ];
+
+  const infoLines = [
+    '',
+    `${chalk.green.bold('Project:')}  ${chalk.white('qbk-ia')}`,
+    `${chalk.green.bold('Repo:')}     ${config ? chalk.blue(config.repo) : chalk.dim('None')}`,
+    `${chalk.green.bold('Branch:')}   ${config ? chalk.yellow(config.branch || 'master') : chalk.dim('N/A')}`,
+    `${chalk.green.bold('Status:')}   ${config ? chalk.green('Linked') : chalk.red('Not Initialized')}`,
+    `${chalk.green.bold('CLI Ver:')}  ${chalk.white('1.1.0')}`,
+    `${chalk.green.bold('Shell:')}    ${chalk.white(process.env.SHELL?.split('/').pop() || 'zsh')}`
+  ];
+
+  console.log('');
+  const maxLines = Math.max(logoLines.length, infoLines.length);
+  for (let i = 0; i < maxLines; i++) {
+    const logo = logoLines[i] || '';
+    const info = infoLines[i] || '';
+    console.log(`${logo.padEnd(20)} ${info}`);
+  }
+  console.log(`\n${chalk.gray('──────────────────────────────────────────────────────')}\n`);
+}
 
 program
   .command('init')
@@ -71,57 +123,106 @@ async function showMenu() {
     const config = await readConfig(cwd);
     const isConfigured = config !== null;
     
+    printHeader(config);
+
     const choices = [
-      { name: '1. Init', value: 'init' },
-      { name: '2. Sync', value: 'sync', disabled: !isConfigured ? 'Requires Init' : false },
-      { name: '3. Status', value: 'status', disabled: !isConfigured ? 'Requires Init' : false },
-      { name: '4. Switch Version', value: 'use', disabled: !isConfigured ? 'Requires Init' : false },
-      { name: '5. Versions List', value: 'versions', disabled: !isConfigured ? 'Requires Init' : false },
-      { name: '6. Profiles', value: 'profiles', disabled: !isConfigured ? 'Requires Init' : false },
-      { name: '7. Publish', value: 'publish', disabled: !isConfigured ? 'Requires Init' : false },
-      { name: '8. Exit', value: 'exit' },
+      { 
+        name: `${chalk.bold.cyan('➜')}  Initialize Project`, 
+        value: 'init',
+        description: 'Connect to a Git repository and setup structure' 
+      },
+      new Separator(),
+      { 
+        name: `${chalk.bold.green('↻')}  Sync Configuration`, 
+        value: 'sync', 
+        disabled: !isConfigured ? chalk.dim('(Requires Init)') : false,
+        description: 'Pull latest AI files from remote'
+      },
+      { 
+        name: `${chalk.bold.blue('ℹ')}  System Status`, 
+        value: 'status', 
+        disabled: !isConfigured ? chalk.dim('(Requires Init)') : false,
+        description: 'Check for local changes and current version'
+      },
+      { 
+        name: `${chalk.bold.magenta('⇋')}  Switch Version`, 
+        value: 'use', 
+        disabled: !isConfigured ? chalk.dim('(Requires Init)') : false,
+        description: 'Switch between commits, tags or branches'
+      },
+      { 
+        name: `${chalk.bold.yellow('☰')}  View History`, 
+        value: 'versions', 
+        disabled: !isConfigured ? chalk.dim('(Requires Init)') : false,
+        description: 'List all available versions in the repo'
+      },
+      { 
+        name: `${chalk.bold.white('👤')}  Manage Profiles`, 
+        value: 'profiles', 
+        disabled: !isConfigured ? chalk.dim('(Requires Init)') : false,
+        description: 'Create or switch between project profiles'
+      },
+      { 
+        name: `${chalk.bold.red('🚀')}  Publish Changes`, 
+        value: 'publish', 
+        disabled: !isConfigured ? chalk.dim('(Requires Init)') : false,
+        description: 'Commit and push your local AI changes'
+      },
+      new Separator(),
+      { name: `   Exit`, value: 'exit' },
     ];
 
-    const action = await select({
-      message: 'Select an action:',
-      choices
-    });
+    try {
+      const action = await select({
+        message: 'What would you like to do?',
+        choices,
+        pageSize: 12
+      });
 
-    switch (action) {
-      case 'init':
-        await initCommand(cwd);
-        break;
-      case 'sync':
-        await syncCommand(cwd);
-        break;
-      case 'status':
-        await statusCommand(cwd);
-        break;
-      case 'use':
-        await useCommand(cwd);
-        break;
-      case 'versions':
-        await versionsCommand(cwd);
-        break;
-      case 'profiles':
-        const profileAction = await select({
-          message: 'Profile actions:',
-          choices: [
-            { name: 'Create', value: 'create' },
-            { name: 'Use', value: 'use' },
-            { name: 'Back', value: 'back' }
-          ]
-        });
-        if (profileAction === 'create') await profileCreateCommand(cwd);
-        if (profileAction === 'use') await profileUseCommand(cwd);
-        break;
-      case 'publish':
-        await publishCommand(cwd);
-        break;
-      case 'exit':
-        process.exit(0);
+      switch (action) {
+        case 'init':
+          await initCommand(cwd);
+          break;
+        case 'sync':
+          await syncCommand(cwd);
+          break;
+        case 'status':
+          await statusCommand(cwd);
+          break;
+        case 'use':
+          await useCommand(cwd);
+          break;
+        case 'versions':
+          await versionsCommand(cwd);
+          break;
+        case 'profiles':
+          const profileAction = await select({
+            message: 'Profile actions:',
+            choices: [
+              { name: 'Create New Profile', value: 'create' },
+              { name: 'Switch Profile', value: 'use' },
+              { name: 'Back to Main Menu', value: 'back' }
+            ]
+          });
+          if (profileAction === 'create') await profileCreateCommand(cwd);
+          if (profileAction === 'use') await profileUseCommand(cwd);
+          break;
+        case 'publish':
+          await publishCommand(cwd);
+          break;
+        case 'exit':
+          console.log(chalk.gray('\n  Goodbye! 👋\n'));
+          process.exit(0);
+      }
+      
+      if (action !== 'exit') {
+          await input({ message: chalk.dim('\nPress Enter to continue...') });
+      }
+    } catch (err: any) {
+      // If user cancelled or pressed escape
+      console.log(chalk.gray('\n  Goodbye! 👋\n'));
+      process.exit(0);
     }
-    console.log(''); // Empty line for readability
   }
 }
 
@@ -130,6 +231,9 @@ if (process.argv.length > 2) {
   program.parse(process.argv);
 } else {
   showMenu().catch(err => {
+    if (err.message && err.message.includes('User force closed')) {
+        process.exit(0);
+    }
     console.error(err);
     process.exit(1);
   });
