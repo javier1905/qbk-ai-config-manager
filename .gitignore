@@ -1,0 +1,28 @@
+# Dependency directories
+node_modules/
+
+# Build artifacts
+dist/
+
+# Temporary directories
+.qbk-temp/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE config
+.vscode
+qbk-ia-cli.code-workspace
