@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="QUBIK Logo" width="300">
+  <img src="https://raw.githubusercontent.com/javier1905/qbk-ai/main/logo.png" alt="QUBIK Logo" width="300">
 </p>
 
 # QBK-AI — AI Config Manager 🤖📦
@@ -29,7 +29,6 @@ Before installing, make sure you have:
 - **Git** installed and globally configured.
 - **SSH Access:** Ensure your SSH keys are configured and added to your Git provider (e.g., GitHub/GitLab). This allows the CLI to sync changes seamlessly without prompting for credentials.
 - A **Git repository URL** (empty or with the basic structure) to use as storage.
-
 
 ---
 
