@@ -197,7 +197,7 @@ export class GitManager {
    * If commitHash is provided, compares against that specific commit.
    * Copies local files into temp, runs git status, then restores temp.
    */
-  async detectLocalChanges(git: SimpleGit, commitHash?: string): Promise<{ hasChanges: boolean; files: string[] }> {
+  async detectLocalChanges(git: SimpleGit, commitHash?: string, branch?: string): Promise<{ hasChanges: boolean; files: string[] }> {
     // Checkout the specific commit the user is on (if provided)
     if (commitHash && commitHash !== 'latest') {
       try {
@@ -227,6 +227,11 @@ export class GitManager {
     // Restore clean state
     await git.checkout(['.']);
     await git.clean('f', ['-d']);
+
+    // Restore branch to avoid leaving git in detached HEAD state
+    if (commitHash && commitHash !== 'latest' && branch) {
+      await git.checkout(branch);
+    }
 
     return { hasChanges: changedFiles.length > 0, files: changedFiles };
   }

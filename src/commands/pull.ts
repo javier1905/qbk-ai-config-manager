@@ -265,11 +265,9 @@ export async function pullCommand(cwd: string): Promise<boolean> {
     spinner.stop();
     logInfo(`El remoto está adelante: ${chalk.yellow(currentRepo.currentVersion)} → ${chalk.cyan(remoteShort)}`);
 
-    // Detect local changes (leaves temp at currentVersion, need to go back to branch HEAD after)
+    // Detect local changes — pass branch so detectLocalChanges restores HEAD after comparing
     const spinnerCheck = ora('Verificando cambios locales...').start();
-    const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion);
-    // Return to branch HEAD so applyToWorkspace copies the latest files
-    await git.checkout(currentRepo.currentBranch);
+    const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion, currentRepo.currentBranch);
     spinnerCheck.stop();
 
     // ─── No local changes → pull directly ───

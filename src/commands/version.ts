@@ -126,7 +126,7 @@ export async function switchVersionCommand(cwd: string): Promise<boolean> {
 
       // ─── Case B: ON the latest commit ───
       // Detect local changes against the current version
-      const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion);
+      const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion, currentRepo.currentBranch);
 
       if (!hasChanges) {
         // No changes → switch directly

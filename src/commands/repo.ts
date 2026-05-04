@@ -264,7 +264,7 @@ export async function switchRepoCommand(cwd: string): Promise<boolean> {
         else {
           // CASE B: On latest commit → check for changes
           const spinnerDetect = ora('Checking for local changes...').start();
-          const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion);
+          const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion, currentRepo.currentBranch);
           spinnerDetect.stop();
           
           if (hasChanges) {

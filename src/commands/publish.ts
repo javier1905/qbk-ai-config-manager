@@ -28,7 +28,7 @@ export async function publishCommand(cwd: string): Promise<boolean> {
     const git = await gitManager.setupTempRepo(currentRepo.url, currentRepo.currentBranch);
 
     // Detect local changes against the current version (HEAD)
-    const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion);
+    const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion, currentRepo.currentBranch);
 
     spinner.stop();
 

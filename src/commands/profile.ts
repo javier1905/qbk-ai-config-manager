@@ -61,7 +61,7 @@ export async function switchProfileCommand(cwd: string): Promise<boolean> {
       const git = await gitManager.setupTempRepo(currentRepo.url, currentRepo.currentBranch);
       spinnerChanges.stop();
 
-      const result = await handlePendingChanges(gitManager, git, currentRepo.currentVersion);
+      const result = await handlePendingChanges(gitManager, git, currentRepo.currentVersion, currentRepo.currentBranch);
       if (result === 'cancelled') {
         await gitManager.cleanTempRepo();
         selectedBranch = null; // Back to profile selection

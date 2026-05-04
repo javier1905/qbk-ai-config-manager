@@ -14,9 +14,10 @@ export async function handlePendingChanges(
   gitManager: GitManager,
   git: SimpleGit,
   currentVersion?: string,
+  branch?: string,
 ): Promise<'saved' | 'discarded' | 'cancelled'> {
   const spinnerDetect = ora('Checking for local changes...').start();
-  const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentVersion);
+  const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentVersion, branch);
   spinnerDetect.stop();
 
   if (!hasChanges) {

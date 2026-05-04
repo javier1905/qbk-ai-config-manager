@@ -27,7 +27,9 @@ Before installing, make sure you have:
 
 - **Node.js** (v18 or higher recommended).
 - **Git** installed and globally configured.
+- **SSH Access:** Ensure your SSH keys are configured and added to your Git provider (e.g., GitHub/GitLab). This allows the CLI to sync changes seamlessly without prompting for credentials.
 - A **Git repository URL** (empty or with the basic structure) to use as storage.
+
 
 ---
 
