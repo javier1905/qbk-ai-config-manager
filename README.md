@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/javier1905/qbk-ai/main/logo.png" alt="QUBIK Logo" width="300">
+  <img src="logo.png" alt="QUBIK Logo" width="300">
 </p>
 
 # QBK-AI — AI Config Manager 🤖📦
