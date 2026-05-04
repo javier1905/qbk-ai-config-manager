@@ -8,115 +8,123 @@ import { handlePendingChanges } from './shared.js';
 /**
  * Command 3: Switch profile (branch).
  */
-export async function switchProfileCommand(cwd: string): Promise<void> {
+export async function switchProfileCommand(cwd: string): Promise<boolean> {
   const config = await readConfig(cwd);
   if (!config) {
     logError('No configuration found. Add a repository first.');
-    return;
+    return false;
   }
 
   const currentRepo = getSelectedRepo(config);
   if (!currentRepo) {
     logError('No repository selected. Add or select a repository first.');
-    return;
+    return false;
   }
 
   const gitManager = new GitManager(cwd);
-  const spinner = ora('Fetching available profiles...').start();
+  let selectedBranch: string | null = null;
 
-  const branches = await gitManager.getRemoteBranches(currentRepo.url);
-  spinner.stop();
+  while (selectedBranch === null) {
+    const spinner = ora('Fetching available profiles...').start();
+    const branches = await gitManager.getRemoteBranches(currentRepo.url);
+    spinner.stop();
 
-  if (branches.length < 2) {
-    logInfo('Only one profile available. Create a new profile first.');
-    return;
-  }
-
-  const choices = branches.map(branch => ({
-    name: `${branch === currentRepo.currentBranch ? chalk.green('● ') : '  '}${branch}${branch === currentRepo.defaultBranch ? chalk.dim(' (default)') : ''}`,
-    value: branch,
-  }));
-
-  let selectedBranch: string;
-  try {
-    selectedBranch = await qbkSelect({
-      message: 'Select a profile (branch):',
-      choices,
-    });
-  } catch {
-    return; // Escape pressed
-  }
-
-  if (selectedBranch === currentRepo.currentBranch) {
-    logInfo('Already on this profile.');
-    return;
-  }
-
-  // Handle pending changes
-  const spinnerChanges = ora('Checking for local changes...').start();
-  try {
-    const git = await gitManager.setupTempRepo(currentRepo.url, currentRepo.currentBranch);
-    spinnerChanges.stop();
-
-    const result = await handlePendingChanges(gitManager, git, currentRepo.currentVersion);
-    if (result === 'cancelled') {
-      await gitManager.cleanTempRepo();
-      return;
+    if (branches.length < 2) {
+      logInfo('Only one profile available. Create a new profile first.');
+      return false;
     }
-    await gitManager.cleanTempRepo();
-  } catch (err: any) {
-    spinnerChanges.stop();
-    logError(err.message);
-    await gitManager.cleanTempRepo();
-    return;
-  }
 
-  // Switch to the selected branch
-  const spinnerSwitch = ora(`Switching to profile "${selectedBranch}"...`).start();
-  try {
-    const git = await gitManager.setupTempRepo(currentRepo.url, selectedBranch);
+    const choices = branches.map(branch => ({
+      name: `${branch === currentRepo.currentBranch ? chalk.green('● ') : '  '}${branch}${branch === currentRepo.defaultBranch ? chalk.dim(' (default)') : ''}`,
+      value: branch,
+    }));
 
-    let headCommit = 'latest';
     try {
-      headCommit = (await git.revparse(['HEAD'])).trim().substring(0, 7);
-    } catch { /* fallback */ }
+      selectedBranch = await qbkSelect({
+        message: 'Select a profile (branch):',
+        choices,
+      });
+    } catch {
+      return true; // Escape pressed on main selection -> back to menu
+    }
 
-    currentRepo.currentBranch = selectedBranch;
-    currentRepo.currentVersion = headCommit;
+    if (selectedBranch === null) return true;
 
-    await gitManager.applyToWorkspace();
-    await writeConfig(cwd, config);
-    await gitManager.cleanTempRepo();
-    spinnerSwitch.stop();
+    if (selectedBranch === currentRepo.currentBranch) {
+      logInfo('Already on this profile.');
+      return false;
+    }
 
-    logSuccessBox('Profile Switched', `Now using profile "${selectedBranch}".`);
-  } catch (err: any) {
-    spinnerSwitch.fail('Failed to switch profile.');
-    logError(err.message);
-    await gitManager.cleanTempRepo();
+    // Handle pending changes
+    const spinnerChanges = ora('Checking for local changes...').start();
+    try {
+      const git = await gitManager.setupTempRepo(currentRepo.url, currentRepo.currentBranch);
+      spinnerChanges.stop();
+
+      const result = await handlePendingChanges(gitManager, git, currentRepo.currentVersion);
+      if (result === 'cancelled') {
+        await gitManager.cleanTempRepo();
+        selectedBranch = null; // Back to profile selection
+        continue;
+      }
+      await gitManager.cleanTempRepo();
+    } catch (err: any) {
+      spinnerChanges.stop();
+      logError(err.message);
+      await gitManager.cleanTempRepo();
+      return false;
+    }
+
+    // Switch to the selected branch
+    const spinnerSwitch = ora(`Switching to profile "${selectedBranch}"...`).start();
+    try {
+      const git = await gitManager.setupTempRepo(currentRepo.url, selectedBranch);
+
+      let headCommit = 'latest';
+      try {
+        headCommit = (await git.revparse(['HEAD'])).trim().substring(0, 7);
+      } catch { /* fallback */ }
+
+      currentRepo.currentBranch = selectedBranch;
+      currentRepo.currentVersion = headCommit;
+
+      await gitManager.applyToWorkspace();
+      await writeConfig(cwd, config);
+      await gitManager.cleanTempRepo();
+      spinnerSwitch.stop();
+
+      logSuccessBox('Profile Switched', `Now using profile "${selectedBranch}".`);
+    } catch (err: any) {
+      spinnerSwitch.fail('Failed to switch profile.');
+      logError(err.message);
+      await gitManager.cleanTempRepo();
+    }
   }
+  return false;
 }
 
 /**
  * Command 4: Add a new profile (branch).
  */
-export async function addProfileCommand(cwd: string): Promise<void> {
+export async function addProfileCommand(cwd: string): Promise<boolean> {
   const config = await readConfig(cwd);
   if (!config) {
     logError('No configuration found. Add a repository first.');
-    return;
+    return false;
   }
 
   const currentRepo = getSelectedRepo(config);
   if (!currentRepo) {
     logError('No repository selected.');
-    return;
+    return false;
   }
 
   const gitManager = new GitManager(cwd);
 
   // Get existing branches to check for duplicates
+  const spinnerBranches = ora('Fetching existing profiles...').start();
   const existingBranches = await gitManager.getRemoteBranches(currentRepo.url);
+  spinnerBranches.stop();
 
   // Ask for name
   let branchName: string;
@@ -137,7 +145,7 @@ export async function addProfileCommand(cwd: string): Promise<void> {
     // Final sanitization just in case
     branchName = branchName.trim().replace(/\s+/g, '-');
   } catch {
-    return; // Escape pressed
+    return true; // Escape pressed
   }
 
   // Ask: blank or from existing branch?
@@ -148,7 +156,7 @@ export async function addProfileCommand(cwd: string): Promise<void> {
       default: true,
     });
   } catch {
-    return; // Escape pressed
+    return true; // Escape pressed
   }
 
   const spinner = ora(`Creating profile "${branchName}"...`).start();
@@ -163,8 +171,9 @@ export async function addProfileCommand(cwd: string): Promise<void> {
       logSuccessBox('Profile Created', `Blank profile "${branchName}" created and pushed.`);
     } else {
       // Let user pick a base branch
-      spinner.stop();
+      spinner.text = 'Fetching existing profiles...';
       const branches = await gitManager.getRemoteBranches(currentRepo.url);
+      spinner.stop();
 
       let baseBranch: string;
       try {
@@ -173,7 +182,7 @@ export async function addProfileCommand(cwd: string): Promise<void> {
           choices: branches.map(b => ({ name: b, value: b })),
         });
       } catch {
-        return; // Escape pressed
+        return true; // Escape pressed
       }
 
       const spinnerCreate = ora(`Creating profile "${branchName}" from "${baseBranch}"...`).start();
@@ -188,23 +197,24 @@ export async function addProfileCommand(cwd: string): Promise<void> {
     logError(`Failed to create profile: ${err.message}`);
     await gitManager.cleanTempRepo();
   }
+  return false;
 }
 
 /**
  * Command 5: Remove a profile (branch).
  * Cannot remove the default branch (main/master).
  */
-export async function removeProfileCommand(cwd: string): Promise<void> {
+export async function removeProfileCommand(cwd: string): Promise<boolean> {
   const config = await readConfig(cwd);
   if (!config) {
     logError('No configuration found. Add a repository first.');
-    return;
+    return false;
   }
 
   const currentRepo = getSelectedRepo(config);
   if (!currentRepo) {
     logError('No repository selected.');
-    return;
+    return false;
   }
 
   const gitManager = new GitManager(cwd);
@@ -217,7 +227,7 @@ export async function removeProfileCommand(cwd: string): Promise<void> {
 
   if (deletableBranches.length === 0) {
     logInfo('No profiles available to remove. The default branch cannot be deleted.');
-    return;
+    return false;
   }
 
   let branchToDelete: string;
@@ -230,7 +240,7 @@ export async function removeProfileCommand(cwd: string): Promise<void> {
       })),
     });
   } catch {
-    return; // Escape pressed
+    return true; // Escape pressed
   }
 
   // Confirm deletion
@@ -241,12 +251,12 @@ export async function removeProfileCommand(cwd: string): Promise<void> {
       default: false,
     });
   } catch {
-    return; // Escape pressed
+    return true; // Escape pressed
   }
 
   if (!confirmed) {
     logInfo(`Profile "${branchToDelete}" was not deleted.`);
-    return;
+    return false;
   }
 
   const spinnerDelete = ora(`Deleting profile "${branchToDelete}"...`).start();
@@ -276,4 +286,5 @@ export async function removeProfileCommand(cwd: string): Promise<void> {
     logError(err.message);
     await gitManager.cleanTempRepo();
   }
+  return false;
 }

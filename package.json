@@ -1,11 +1,11 @@
 {
-  "name": "qbk-ia",
+  "name": "qbk-ai",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "qbk-ia": "./dist/index.js"
+    "qbk-ai": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

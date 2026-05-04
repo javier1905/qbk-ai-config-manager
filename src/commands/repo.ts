@@ -9,7 +9,7 @@ import { handlePendingChanges } from './shared.js';
 /**
  * Command 1: Add a new repository.
  */
-export async function addRepoCommand(cwd: string): Promise<void> {
+export async function addRepoCommand(cwd: string): Promise<boolean> {
   let repoUrl: string;
   try {
     repoUrl = await qbkInput({ 
@@ -17,7 +17,7 @@ export async function addRepoCommand(cwd: string): Promise<void> {
       validate: (value) => value.trim() ? true : 'Repository URL cannot be empty.'
     });
   } catch {
-    return; // Escape pressed
+    return true; // Escape pressed
   }
 
   const gitManager = new GitManager(cwd);
@@ -28,7 +28,7 @@ export async function addRepoCommand(cwd: string): Promise<void> {
   if (!connected) {
     spinner.fail('Connection failed.');
     logErrorBox('Cannot connect', 'Could not connect to the provided Git repository.');
-    return;
+    return false;
   }
   spinner.succeed('Connection successful.');
 
@@ -41,7 +41,7 @@ export async function addRepoCommand(cwd: string): Promise<void> {
   const alreadyExists = config.repositories.some(r => r.url === repoUrl);
   if (alreadyExists) {
     logError('This repository is already configured.');
-    return;
+    return false;
   }
 
   // 3. Check if repo is empty
@@ -93,7 +93,7 @@ export async function addRepoCommand(cwd: string): Promise<void> {
       logError(err.message);
       await gitManager.cleanTempRepo();
     }
-    return;
+    return false;
   }
 
   // 4. Non-empty repo: clone (without specifying branch) and detect default branch
@@ -119,7 +119,7 @@ export async function addRepoCommand(cwd: string): Promise<void> {
         `The "${defaultBranch}" branch does not have the required AI config structure (.agents, .claude, AGENTS.md, CLAUDE.md).`
       );
       await gitManager.cleanTempRepo();
-      return;
+      return false;
     }
 
     // Get current HEAD commit
@@ -155,16 +155,17 @@ export async function addRepoCommand(cwd: string): Promise<void> {
     logError(err.message);
     await gitManager.cleanTempRepo();
   }
+  return false;
 }
 
 /**
  * Command 2: Switch repository.
  */
-export async function switchRepoCommand(cwd: string): Promise<void> {
+export async function switchRepoCommand(cwd: string): Promise<boolean> {
   const config = await readConfig(cwd);
   if (!config || config.repositories.length < 2) {
     logInfo('You need at least 2 repositories to switch.');
-    return;
+    return false;
   }
 
   const currentRepo = getSelectedRepo(config);
@@ -184,14 +185,14 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
         choices,
       });
     } catch {
-      return; // Escape pressed
+      return true; // Escape pressed
     }
 
-    if (selectedIndex === null) return;
+    if (selectedIndex === null) return true;
 
     if (selectedIndex === config.selectedRepoIndex) {
       logInfo('Already on this repository.');
-      return;
+      return false;
     }
 
     const gitManager = new GitManager(cwd);
@@ -219,7 +220,8 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
             });
           } catch {
             await gitManager.cleanTempRepo();
-            return;
+            selectedIndex = null;
+            continue;
           }
 
           if (!shouldContinue) {
@@ -231,7 +233,9 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
         } 
         else {
           // CASE B: On latest commit → check for changes
+          const spinnerDetect = ora('Checking for local changes...').start();
           const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion);
+          spinnerDetect.stop();
           
           if (hasChanges) {
             logSkull();
@@ -251,7 +255,8 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
               });
             } catch {
               await gitManager.cleanTempRepo();
-              return;
+              selectedIndex = null;
+              continue;
             }
 
             if (action === 'save') {
@@ -280,13 +285,15 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
                     });
                   } catch {
                     await gitManager.cleanTempRepo();
-                    return;
+                    selectedIndex = null;
+                    continue;
                   }
 
                   if (!resolved) {
                     logInfo('Operation cancelled.');
                     await gitManager.cleanTempRepo();
-                    return;
+                    selectedIndex = null;
+                    continue;
                   }
                 }
               }
@@ -300,7 +307,7 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
         spinnerStatus.stop();
         logError(err.message);
         await gitManager.cleanTempRepo();
-        return;
+        return false;
       }
     }
 
@@ -315,10 +322,12 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
         headCommit = (await git.revparse(['HEAD'])).trim().substring(0, 7);
       } catch { /* fallback */ }
 
-      config.selectedRepoIndex = selectedIndex;
-      // We reset branch and version to default/latest of the target repo when switching
-      config.repositories[selectedIndex].currentBranch = targetRepo.defaultBranch;
-      config.repositories[selectedIndex].currentVersion = headCommit;
+      if (selectedIndex !== null) {
+        config.selectedRepoIndex = selectedIndex;
+        // We reset branch and version to default/latest of the target repo when switching
+        config.repositories[selectedIndex].currentBranch = targetRepo.defaultBranch;
+        config.repositories[selectedIndex].currentVersion = headCommit;
+      }
 
       await gitManager.applyToWorkspace();
       await writeConfig(cwd, config);
@@ -335,4 +344,5 @@ export async function switchRepoCommand(cwd: string): Promise<void> {
       await gitManager.cleanTempRepo();
     }
   }
+  return false;
 }

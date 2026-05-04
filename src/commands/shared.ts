@@ -1,9 +1,8 @@
-import { select, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
 import type { SimpleGit } from 'simple-git';
 import { GitManager } from '../git.js';
-import { logInfo, logSuccess, logError, logWarning, logSkull } from '../utils.js';
+import { logInfo, logSuccess, logError, logWarning, logSkull, qbkInput, qbkSelect } from '../utils.js';
 
 /**
  * Handles the "Save or Discard" flow that is shared across
@@ -16,7 +15,9 @@ export async function handlePendingChanges(
   git: SimpleGit,
   currentVersion?: string,
 ): Promise<'saved' | 'discarded' | 'cancelled'> {
+  const spinnerDetect = ora('Checking for local changes...').start();
   const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentVersion);
+  spinnerDetect.stop();
 
   if (!hasChanges) {
     return 'saved'; // Nothing to handle
@@ -29,7 +30,7 @@ export async function handlePendingChanges(
   }
 
   try {
-    const action = await select({
+    const action = await qbkSelect({
       message: 'What do you want to do with your local changes?',
       choices: [
         { name: `${chalk.green('💾')}  Save changes (commit & push)`, value: 'save' },
@@ -38,7 +39,7 @@ export async function handlePendingChanges(
     });
 
     if (action === 'save') {
-      const message = await input({
+      const message = await qbkInput({
         message: 'Enter a commit message:',
         default: 'chore: save local AI config changes',
       });

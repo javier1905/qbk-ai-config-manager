@@ -8,17 +8,17 @@ import { logError, logInfo, logSuccessBox, logWarning, qbkInput, qbkConfirm } fr
  * Command 7: Push local changes to the remote repository.
  * Only available when on the latest commit of the current branch.
  */
-export async function publishCommand(cwd: string): Promise<void> {
+export async function publishCommand(cwd: string): Promise<boolean> {
   const config = await readConfig(cwd);
   if (!config) {
     logError('No configuration found. Add a repository first.');
-    return;
+    return false;
   }
 
   const currentRepo = getSelectedRepo(config);
   if (!currentRepo) {
     logError('No repository selected.');
-    return;
+    return false;
   }
 
   const gitManager = new GitManager(cwd);
@@ -35,7 +35,7 @@ export async function publishCommand(cwd: string): Promise<void> {
     if (!hasChanges) {
       logInfo('No changes detected. Your workspace is up to date with the remote.');
       await gitManager.cleanTempRepo();
-      return;
+      return false;
     }
 
     // Show changed files
@@ -54,7 +54,7 @@ export async function publishCommand(cwd: string): Promise<void> {
       });
     } catch {
       await gitManager.cleanTempRepo();
-      return; // Escape pressed
+      return true; // Escape pressed
     }
 
     let success = false;
@@ -89,13 +89,13 @@ export async function publishCommand(cwd: string): Promise<void> {
           });
         } catch {
           await gitManager.cleanTempRepo();
-          return; // Escape
+          return true; // Escape
         }
 
         if (!resolved) {
           logInfo('Operation cancelled.');
           await gitManager.cleanTempRepo();
-          return;
+          return true;
         }
       }
     }
@@ -104,4 +104,5 @@ export async function publishCommand(cwd: string): Promise<void> {
     logError(err.message);
     await gitManager.cleanTempRepo();
   }
+  return false;
 }

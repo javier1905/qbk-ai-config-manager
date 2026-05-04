@@ -7,29 +7,21 @@ import { addRepoCommand, switchRepoCommand } from './commands/repo.js';
 import { switchProfileCommand, addProfileCommand, removeProfileCommand } from './commands/profile.js';
 import { switchVersionCommand } from './commands/version.js';
 import { publishCommand } from './commands/publish.js';
+import { pullCommand } from './commands/pull.js';
 import { GitManager } from './git.js';
 import chalk from 'chalk';
 import readline from 'readline';
+import ora from 'ora';
 import { qbkInput, qbkSelect } from './utils.js';
 
 const cwd = process.cwd();
 
-// ─── Global Escape Key Listener ───────────────────────────────
-if (process.stdin.isTTY) {
-  readline.emitKeypressEvents(process.stdin);
-  process.stdin.setRawMode(true);
-  process.stdin.on('keypress', (_str, key) => {
-    if (key.name === 'escape') {
-      console.clear();
-      console.log(chalk.gray('\n  Goodbye! 👋\n'));
-      process.exit(0);
-    }
-    if (key.ctrl && key.name === 'c') {
-      console.clear();
-      process.exit(0);
-    }
-  });
-}
+// ─── Global Exit Listener ──────────────────────────────────────
+process.on('SIGINT', () => {
+  console.clear();
+  console.log(chalk.gray('\n  Goodbye! 👋\n'));
+  process.exit(0);
+});
 
 // ─── Header UI ────────────────────────────────────────────────
 
@@ -127,7 +119,14 @@ function buildMenuChoices(config: AiConfig | null, branchCount: number, isOnLate
       description: 'Checkout a specific commit',
     });
 
-    // 7. Publish Changes (only if on latest commit)
+    // 7. Pull Changes (always if repo selected — command handles "already up to date")
+    choices.push({
+      name: `${chalk.bold.cyan('⬇')}   Pull Changes`,
+      value: 'pull',
+      description: 'Sync the latest remote changes to your local workspace',
+    });
+
+    // 8. Publish Changes (only if on latest commit)
     if (isOnLatest) {
       choices.push({
         name: `${chalk.bold.red('🚀')}  Push Changes`,
@@ -143,43 +142,68 @@ function buildMenuChoices(config: AiConfig | null, branchCount: number, isOnLate
   return choices;
 }
 
+// ─── Menu State Loader ────────────────────────────────────────
+
+function printLoadingScreen() {
+  console.clear();
+
+  const bigLogo = `
+  ${chalk.white.bold(' ██████   ██    ██  ██████   ██  ██   ██')}
+  ${chalk.white.bold('██    ██  ██    ██  ██   ██  ██  ██  ██')}
+  ${chalk.white.bold('██    ██  ██    ██  ██████   ██  █████')}
+  ${chalk.white.bold('██ ▄▄ ██  ██    ██  ██   ██  ██  ██  ██')}
+  ${chalk.white.bold(' ██████    ██████   ██████   ██  ██   ██')}
+  ${chalk.white.bold('    ▀▀')}
+  ${chalk.hex('#FF8C00').bold('       A I   C O N F I G   M A N A G E R')}
+  `;
+
+  console.log(bigLogo);
+  console.log(`  ${chalk.bgBlack('  ')}${chalk.bgRed('  ')}${chalk.bgGreen('  ')}${chalk.bgYellow('  ')}${chalk.bgBlue('  ')}${chalk.bgMagenta('  ')}${chalk.bgCyan('  ')}${chalk.bgWhite('  ')}`);
+  console.log(`\n${chalk.gray('──────────────────────────────────────────────────────')}\n`);
+}
+
+async function loadMenuState(): Promise<{ config: ReturnType<typeof readConfig> extends Promise<infer T> ? T : never, branchCount: number, isOnLatest: boolean, currentMessage: string }> {
+  const config = await readConfig(cwd);
+  let branchCount = 0;
+  let isOnLatest = false;
+  let currentMessage = '';
+  const repo = config ? getSelectedRepo(config) : null;
+  if (repo) {
+    const gitManager = new GitManager(cwd);
+    try {
+      const branches = await gitManager.getRemoteBranches(repo.url);
+      branchCount = branches.length;
+    } catch {
+      branchCount = 1;
+    }
+    try {
+      isOnLatest = await gitManager.isOnLatestCommit(repo.url, repo.currentBranch, repo.currentVersion);
+
+      const git = await gitManager.setupTempRepo(repo.url, repo.currentBranch);
+      const commits = await gitManager.getCommits(git, 50);
+      const currentCommit = commits.find(c =>
+        c.hash.substring(0, 7) === repo.currentVersion ||
+        c.hash.startsWith(repo.currentVersion)
+      );
+      if (currentCommit) {
+        currentMessage = currentCommit.message;
+      }
+      await gitManager.cleanTempRepo();
+    } catch {
+      isOnLatest = false;
+    }
+  }
+  return { config, branchCount, isOnLatest, currentMessage };
+}
+
 // ─── Main Loop ────────────────────────────────────────────────
 
 async function showMenu() {
   while (true) {
-    const config = await readConfig(cwd);
-
-    // Fetch branch count and latest commit status for the selected repo
-    let branchCount = 0;
-    let isOnLatest = false;
-    let currentMessage = '';
-    const repo = config ? getSelectedRepo(config) : null;
-    if (repo) {
-      const gitManager = new GitManager(cwd);
-      try {
-        const branches = await gitManager.getRemoteBranches(repo.url);
-        branchCount = branches.length;
-      } catch {
-        branchCount = 1;
-      }
-      try {
-        isOnLatest = await gitManager.isOnLatestCommit(repo.url, repo.currentBranch, repo.currentVersion);
-        
-        // Fetch commit message for current version
-        const git = await gitManager.setupTempRepo(repo.url, repo.currentBranch);
-        const commits = await gitManager.getCommits(git, 50);
-        const currentCommit = commits.find(c => 
-          c.hash.substring(0, 7) === repo.currentVersion || 
-          c.hash.startsWith(repo.currentVersion)
-        );
-        if (currentCommit) {
-          currentMessage = currentCommit.message;
-        }
-        await gitManager.cleanTempRepo();
-      } catch {
-        isOnLatest = false;
-      }
-    }
+    printLoadingScreen();
+    const spinner = ora({ text: chalk.dim('Cargando...'), color: 'cyan' }).start();
+    const { config, branchCount, isOnLatest, currentMessage } = await loadMenuState();
+    spinner.stop();
 
     printHeader(config, isOnLatest, currentMessage);
 
@@ -192,27 +216,31 @@ async function showMenu() {
         pageSize: 12,
       });
 
+      let cancelled = false;
       switch (action) {
         case 'add-repo':
-          await addRepoCommand(cwd);
+          cancelled = await addRepoCommand(cwd);
           break;
         case 'switch-repo':
-          await switchRepoCommand(cwd);
+          cancelled = await switchRepoCommand(cwd);
           break;
         case 'switch-profile':
-          await switchProfileCommand(cwd);
+          cancelled = await switchProfileCommand(cwd);
           break;
         case 'add-profile':
-          await addProfileCommand(cwd);
+          cancelled = await addProfileCommand(cwd);
           break;
         case 'remove-profile':
-          await removeProfileCommand(cwd);
+          cancelled = await removeProfileCommand(cwd);
           break;
         case 'switch-version':
-          await switchVersionCommand(cwd);
+          cancelled = await switchVersionCommand(cwd);
+          break;
+        case 'pull':
+          cancelled = await pullCommand(cwd);
           break;
         case 'publish':
-          await publishCommand(cwd);
+          cancelled = await publishCommand(cwd);
           break;
         case 'exit':
           console.clear();
@@ -220,11 +248,15 @@ async function showMenu() {
           process.exit(0);
       }
 
-      if (action !== 'exit') {
-        await qbkInput({ message: chalk.dim('Press Enter to continue...') });
+      if (action !== 'exit' && !cancelled) {
+        try {
+          await qbkInput({ message: chalk.dim('Press Enter to continue...') });
+        } catch {
+          // If they press Escape here, just loop back to menu
+        }
       }
     } catch {
-      // User pressed Escape or Ctrl+C
+      // User pressed Escape or Ctrl+C on the main menu selection
       console.clear();
       console.log(chalk.gray('\n  Goodbye! 👋\n'));
       process.exit(0);

@@ -2,12 +2,14 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import chalk from 'chalk';
+import readline from 'readline';
 import { input, select, confirm } from '@inquirer/prompts';
 
 export const AI_FILES = ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md'];
 
 export const CONFIG_FILE = '.ai-config.json';
 export const TEMP_DIR = '.qbk-temp';
+export const STASH_DIR = '.qbk-stash';
 
 export async function checkFileExists(filePath: string): Promise<boolean> {
   try {
@@ -70,7 +72,43 @@ export function logSkull() {
   console.log(skull);
 }
 
-// ─── Interactive UI ───────────────────────────────────────────
+// ─── Interactive UI Helpers ───────────────────────────────────
+
+/**
+ * Internal helper to handle Escape key in prompts.
+ */
+async function withEscape<T>(promptFn: (context: any) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  
+  const handleData = (data: Buffer) => {
+    // 0x1b is the Escape key code. 
+    // We only abort if it's a standalone Escape (length 1) to avoid breaking arrow keys.
+    if (data.length === 1 && data[0] === 0x1b) {
+      controller.abort();
+    }
+  };
+
+  const isTTY = process.stdin.isTTY;
+  const wasRaw = process.stdin.isRaw;
+  
+  if (isTTY) {
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+  }
+  
+  process.stdin.on('data', handleData);
+
+  try {
+    return await promptFn({ signal: controller.signal });
+  } catch (err: any) {
+    throw err;
+  } finally {
+    process.stdin.removeListener('data', handleData);
+    if (isTTY) {
+      process.stdin.setRawMode(wasRaw);
+    }
+  }
+}
 
 export async function qbkInput(options: {
   message: string;
@@ -78,7 +116,7 @@ export async function qbkInput(options: {
   validate?: (value: string) => string | boolean | Promise<string | boolean>;
   transformer?: (value: string, { isFinal }: { isFinal: boolean }) => string;
 }) {
-  return await input({
+  return await withEscape((context) => input({
     ...options,
     theme: {
       prefix: chalk.cyan('?'),
@@ -88,7 +126,7 @@ export async function qbkInput(options: {
         defaultAnswer: (text: string) => chalk.dim(`(${text})`),
       },
     },
-  });
+  }, context));
 }
 
 export async function qbkSelect<T>(options: {
@@ -96,7 +134,7 @@ export async function qbkSelect<T>(options: {
   choices: any[];
   pageSize?: number;
 }) {
-  return await select({
+  return await withEscape((context) => select({
     ...options,
     theme: {
       prefix: chalk.magenta('?'),
@@ -105,14 +143,14 @@ export async function qbkSelect<T>(options: {
         answer: (text: string) => chalk.magenta(text),
       },
     },
-  });
+  }, context));
 }
 
 export async function qbkConfirm(options: {
   message: string;
   default?: boolean;
 }) {
-  return await confirm({
+  return await withEscape((context) => confirm({
     ...options,
     theme: {
       prefix: chalk.yellow('?'),
@@ -121,7 +159,7 @@ export async function qbkConfirm(options: {
         answer: (text: string) => chalk.yellow(text),
       },
     },
-  });
+  }, context));
 }
 
 // ─── File Operations ──────────────────────────────────────────
@@ -156,7 +194,7 @@ export async function ensureGitignore(cwd: string): Promise<void> {
     content = await fs.readFile(gitignorePath, 'utf8');
   }
 
-  const filesToIgnore = [...AI_FILES, CONFIG_FILE, TEMP_DIR];
+  const filesToIgnore = [...AI_FILES, CONFIG_FILE, TEMP_DIR, STASH_DIR];
   let appended = false;
   for (const file of filesToIgnore) {
     if (!content.includes(file)) {

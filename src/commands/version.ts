@@ -16,17 +16,17 @@ import { logSuccess, logError, logInfo, logSuccessBox, logWarning, logSkull, qbk
  *      - Discard → switch.
  *      - Save → commit & push, then switch.
  */
-export async function switchVersionCommand(cwd: string): Promise<void> {
+export async function switchVersionCommand(cwd: string): Promise<boolean> {
   const config = await readConfig(cwd);
   if (!config) {
     logError('No configuration found. Add a repository first.');
-    return;
+    return false;
   }
 
   const currentRepo = getSelectedRepo(config);
   if (!currentRepo) {
     logError('No repository selected.');
-    return;
+    return false;
   }
 
   const gitManager = new GitManager(cwd);
@@ -40,7 +40,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
     if (commits.length === 0) {
       logInfo('No versions (commits) found for this profile.');
       await gitManager.cleanTempRepo();
-      return;
+      return false;
     }
 
     // Check if user is on the latest commit
@@ -70,12 +70,12 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
       } catch {
         // Escape pressed → back to main menu
         await gitManager.cleanTempRepo();
-        return;
+        return true;
       }
 
       if (selectedCommit === null) {
         await gitManager.cleanTempRepo();
-        return;
+        return true;
       }
 
       const shortHash = selectedCommit.substring(0, 7);
@@ -84,7 +84,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
       if (shortHash === currentRepo.currentVersion || selectedCommit.startsWith(currentRepo.currentVersion)) {
         logInfo('Already on this version.');
         await gitManager.cleanTempRepo();
-        return;
+        return false;
       }
 
       // ─── Case A: NOT on the latest commit ───
@@ -100,8 +100,8 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
             default: false,
           });
         } catch {
-          await gitManager.cleanTempRepo();
-          return; // Escape
+          selectedCommit = null;
+          continue;
         }
 
         if (!shouldContinue) {
@@ -121,7 +121,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
         const selectedMsg = commits.find(c => c.hash === selectedCommit)?.message || '';
         logSuccessBox('Version Switched', `Now on version ${shortHash}: "${selectedMsg}"`);
-        return;
+        return false;
       }
 
       // ─── Case B: ON the latest commit ───
@@ -140,7 +140,7 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
         const selectedMsg = commits.find(c => c.hash === selectedCommit)?.message || '';
         logSuccessBox('Version Switched', `Now on version ${shortHash}: "${selectedMsg}"`);
-        return;
+        return false;
       }
 
       // Has changes → ask save or discard
@@ -160,8 +160,8 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
           ],
         });
       } catch {
-        await gitManager.cleanTempRepo();
-        return; // Escape
+        selectedCommit = null;
+        continue;
       }
 
       if (action === 'discard') {
@@ -170,7 +170,9 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
         // Reset temp to clean state before checkout
         await git.checkout(['.']);
         await git.clean('f', ['-d']);
-        await gitManager.checkoutCommit(git, selectedCommit);
+        if (selectedCommit !== null) {
+          await gitManager.checkoutCommit(git, selectedCommit);
+        }
         currentRepo.currentVersion = shortHash;
         await gitManager.applyToWorkspace();
         await writeConfig(cwd, config);
@@ -179,10 +181,9 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
         const selectedMsg = commits.find(c => c.hash === selectedCommit)?.message || '';
         logSuccessBox('Version Switched', `Changes discarded. Now on version ${shortHash}: "${selectedMsg}"`);
-        return;
+        return false;
       }
 
-      // Save changes: commit & push first, then switch
       let commitMessage: string;
       try {
         commitMessage = await qbkInput({
@@ -190,8 +191,8 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
           default: 'chore: save local AI config changes',
         });
       } catch {
-        await gitManager.cleanTempRepo();
-        return; // Escape
+        selectedCommit = null;
+        continue;
       }
 
       let success = false;
@@ -214,13 +215,15 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
             });
           } catch {
             await gitManager.cleanTempRepo();
-            return; // Escape
+            selectedCommit = null;
+            continue;
           }
 
           if (!resolved) {
             logInfo('Operation cancelled.');
             await gitManager.cleanTempRepo();
-            return;
+            selectedCommit = null;
+            continue;
           }
           // If resolved, the loop continues and tries to commit/push again
           // Note: commitAndPush will re-add files and try a new commit/push
@@ -229,7 +232,9 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
       // Now switch to the selected commit
       const spinnerSwitch = ora(`Switching to version ${shortHash}...`).start();
-      await gitManager.checkoutCommit(git, selectedCommit);
+      if (selectedCommit !== null) {
+        await gitManager.checkoutCommit(git, selectedCommit);
+      }
       currentRepo.currentVersion = shortHash;
       await gitManager.applyToWorkspace();
       await writeConfig(cwd, config);
@@ -238,11 +243,12 @@ export async function switchVersionCommand(cwd: string): Promise<void> {
 
       const selectedMsg = commits.find(c => c.hash === selectedCommit)?.message || '';
       logSuccessBox('Version Switched', `Changes saved. Now on version ${shortHash}: "${selectedMsg}"`);
-      return;
+      return false;
     }
   } catch (err: any) {
     spinner.stop();
     logError(err.message);
     await gitManager.cleanTempRepo();
   }
+  return false;
 }
