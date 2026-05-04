@@ -48,7 +48,7 @@ function displayFileDiff(localContent: string, remoteContent: string): void {
     if (diff[i].type === 'same') {
       let count = 0;
       while (i < diff.length && diff[i].type === 'same') { count++; i++; }
-      console.log(chalk.dim(`     ... ${count} línea${count !== 1 ? 's' : ''} sin cambios ...`));
+      console.log(chalk.dim(`     ... ${count} line${count !== 1 ? 's' : ''} without changes ...`));
     } else {
       while (i < diff.length && diff[i].type !== 'same') {
         const { type, line } = diff[i];
@@ -174,33 +174,33 @@ async function mergeStashIntoCwd(cwd: string): Promise<ConflictFile[]> {
 async function resolveConflicts(conflicts: ConflictFile[]): Promise<'resolved' | 'cancelled'> {
   const sep = chalk.gray('──────────────────────────────────────────────────────');
   console.log(`\n${sep}`);
-  console.log(`  ${chalk.yellow.bold(`⚠  ${conflicts.length} conflicto${conflicts.length !== 1 ? 's' : ''} para resolver`)}\n`);
+  console.log(`  ${chalk.yellow.bold(`⚠  ${conflicts.length} conflict${conflicts.length !== 1 ? 's' : ''} to resolve`)}\n`);
 
   for (let idx = 0; idx < conflicts.length; idx++) {
     const conflict = conflicts[idx];
-    console.log(`  ${chalk.gray(`[${idx + 1}/${conflicts.length}]`)} ${chalk.bold('Archivo:')} ${chalk.cyan(conflict.relativePath)}`);
+    console.log(`  ${chalk.gray(`[${idx + 1}/${conflicts.length}]`)} ${chalk.bold('File:')} ${chalk.cyan(conflict.relativePath)}`);
     console.log(sep + '\n');
 
     const localContent = await fs.readFile(conflict.localPath, 'utf8').catch(() => '');
     const remoteContent = await fs.readFile(conflict.remotePath, 'utf8').catch(() => '');
 
     displayFileDiff(localContent, remoteContent);
-    console.log(`\n  ${chalk.red('- rojo')} = tu versión local    ${chalk.green('+ verde')} = cambios del remoto\n`);
+    console.log(`\n  ${chalk.red('- red')} = your local version    ${chalk.green('+ green')} = remote changes\n`);
 
     let choice: string;
     try {
       choice = await qbkSelect({
-        message: `"${conflict.relativePath}" — ¿qué querés mantener?`,
+        message: `"${conflict.relativePath}" — what do you want to keep?`,
         choices: [
           {
             name: `${chalk.yellow('↑')}  Keep mine (local)`,
             value: 'local',
-            description: 'Se usa tu versión local',
+            description: 'Uses your local version',
           },
           {
             name: `${chalk.blue('↓')}  Keep theirs (remote)`,
             value: 'remote',
-            description: 'Se usa la versión del remoto',
+            description: 'Uses the remote version',
           },
         ],
       });
@@ -210,9 +210,9 @@ async function resolveConflicts(conflicts: ConflictFile[]): Promise<'resolved' |
 
     if (choice === 'local') {
       await fs.copyFile(conflict.localPath, conflict.remotePath);
-      logSuccess(`"${conflict.relativePath}" → se mantuvo tu versión local.`);
+      logSuccess(`"${conflict.relativePath}" → your local version was kept.`);
     } else {
-      logSuccess(`"${conflict.relativePath}" → se usa la versión del remoto.`);
+      logSuccess(`"${conflict.relativePath}" → remote version is used.`);
     }
     console.log('');
   }
@@ -225,18 +225,18 @@ async function resolveConflicts(conflicts: ConflictFile[]): Promise<'resolved' |
 export async function pullCommand(cwd: string): Promise<boolean> {
   const config = await readConfig(cwd);
   if (!config) {
-    logError('No hay configuración. Agregá un repositorio primero.');
+    logError('No configuration found. Add a repository first.');
     return false;
   }
 
   const currentRepo = getSelectedRepo(config);
   if (!currentRepo) {
-    logError('No hay repositorio seleccionado.');
+    logError('No repository selected.');
     return false;
   }
 
   const gitManager = new GitManager(cwd);
-  const spinner = ora('Verificando cambios en el remoto...').start();
+  const spinner = ora('Checking for remote changes...').start();
 
   try {
     const git = await gitManager.setupTempRepo(currentRepo.url, currentRepo.currentBranch);
@@ -258,32 +258,32 @@ export async function pullCommand(cwd: string): Promise<boolean> {
     if (upToDate) {
       spinner.stop();
       await gitManager.cleanTempRepo();
-      logInfo('Ya estás al día. No hay nuevos cambios en el remoto.');
+      logInfo('You are already up to date. No new changes in the remote.');
       return false;
     }
 
     spinner.stop();
-    logInfo(`El remoto está adelante: ${chalk.yellow(currentRepo.currentVersion)} → ${chalk.cyan(remoteShort)}`);
+    logInfo(`Remote is ahead: ${chalk.yellow(currentRepo.currentVersion)} → ${chalk.cyan(remoteShort)}`);
 
     // Detect local changes — pass branch so detectLocalChanges restores HEAD after comparing
-    const spinnerCheck = ora('Verificando cambios locales...').start();
+    const spinnerCheck = ora('Checking for local changes...').start();
     const { hasChanges, files } = await gitManager.detectLocalChanges(git, currentRepo.currentVersion, currentRepo.currentBranch);
     spinnerCheck.stop();
 
     // ─── No local changes → pull directly ───
     if (!hasChanges) {
-      const spinnerPull = ora('Aplicando cambios del remoto...').start();
+      const spinnerPull = ora('Applying remote changes...').start();
       await gitManager.applyToWorkspace();
       currentRepo.currentVersion = remoteShort;
       await writeConfig(cwd, config);
       await gitManager.cleanTempRepo();
       spinnerPull.stop();
-      logSuccessBox('Pull completo', `Actualizado a la versión ${remoteShort}.`);
+      logSuccessBox('Pull complete', `Updated to version ${remoteShort}.`);
       return false;
     }
 
     // ─── Has local changes ───
-    logWarning('Tenés cambios locales:');
+    logWarning('You have local changes:');
     for (const f of files) {
       console.log(`    ${chalk.yellow('→')} ${f}`);
     }
@@ -292,17 +292,17 @@ export async function pullCommand(cwd: string): Promise<boolean> {
     let action: string;
     try {
       action = await qbkSelect({
-        message: 'Tenés cambios locales. ¿Qué querés hacer?',
+        message: 'You have local changes. What do you want to do?',
         choices: [
           {
             name: `${chalk.green('📦')}  Stash & Pull`,
             value: 'stash',
-            description: 'Guarda tus cambios temporalmente, trae el remoto y los fusiona de vuelta',
+            description: 'Saves your changes temporarily, pulls the remote, and merges them back',
           },
           {
             name: `${chalk.red('🗑')}   Descartar & Pull`,
             value: 'discard',
-            description: 'Descarta tus cambios locales y aplica la versión del remoto',
+            description: 'Discards your local changes and applies the remote version',
           },
         ],
       });
@@ -316,7 +316,7 @@ export async function pullCommand(cwd: string): Promise<boolean> {
       let confirmed: boolean;
       try {
         confirmed = await qbkConfirm({
-          message: '¿Seguro que querés descartar todos tus cambios locales?',
+          message: 'Are you sure you want to discard all your local changes?',
           default: false,
         });
       } catch {
@@ -329,36 +329,36 @@ export async function pullCommand(cwd: string): Promise<boolean> {
         return false;
       }
 
-      const spinnerPull = ora('Aplicando cambios del remoto...').start();
+      const spinnerPull = ora('Applying remote changes...').start();
       await gitManager.applyToWorkspace();
       currentRepo.currentVersion = remoteShort;
       await writeConfig(cwd, config);
       await gitManager.cleanTempRepo();
       spinnerPull.stop();
-      logSuccessBox('Pull completo', `Actualizado a ${remoteShort}. Cambios locales descartados.`);
+      logSuccessBox('Pull complete', `Updated to ${remoteShort}. Local changes discarded.`);
       return false;
     }
 
     // ─── Stash route ───
-    const spinnerStash = ora('Guardando cambios locales en stash...').start();
+    const spinnerStash = ora('Stashing local changes...').start();
     await saveStash(cwd);
-    spinnerStash.succeed('Cambios locales guardados en stash.');
+    spinnerStash.succeed('Local changes saved to stash.');
 
-    const spinnerApply = ora('Aplicando cambios del remoto...').start();
+    const spinnerApply = ora('Applying remote changes...').start();
     await gitManager.applyToWorkspace();
     currentRepo.currentVersion = remoteShort;
     await writeConfig(cwd, config);
     await gitManager.cleanTempRepo();
-    spinnerApply.succeed('Cambios del remoto aplicados.');
+    spinnerApply.succeed('Remote changes applied.');
 
-    const spinnerMerge = ora('Fusionando tus cambios de vuelta...').start();
+    const spinnerMerge = ora('Merging your changes back...').start();
     const conflicts = await mergeStashIntoCwd(cwd);
     spinnerMerge.stop();
 
     // No conflicts → clean merge
     if (conflicts.length === 0) {
       await clearStash(cwd);
-      logSuccessBox('Pull completo', `Actualizado a ${remoteShort}. Tus cambios se fusionaron automáticamente sin conflictos.`);
+      logSuccessBox('Pull complete', `Updated to ${remoteShort}. Your changes were automatically merged without conflicts.`);
       return false;
     }
 
@@ -366,19 +366,19 @@ export async function pullCommand(cwd: string): Promise<boolean> {
     const result = await resolveConflicts(conflicts);
 
     if (result === 'cancelled') {
-      logWarning('Resolución cancelada. Restaurando tus cambios locales...');
+      logWarning('Resolution cancelled. Restoring your local changes...');
       await restoreStash(cwd);
       currentRepo.currentVersion = originalVersion;
       await writeConfig(cwd, config);
       await clearStash(cwd);
-      logInfo('Tus cambios locales fueron restaurados.');
+      logInfo('Your local changes were restored.');
       return true;
     }
 
     await clearStash(cwd);
     logSuccessBox(
-      'Pull completo',
-      `Actualizado a ${remoteShort}. ${conflicts.length} conflicto${conflicts.length !== 1 ? 's' : ''} resuelto${conflicts.length !== 1 ? 's' : ''}.`
+      'Pull complete',
+      `Updated to ${remoteShort}. ${conflicts.length} conflict${conflicts.length !== 1 ? 's' : ''} resolved.`
     );
 
   } catch (err: any) {

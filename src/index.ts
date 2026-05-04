@@ -12,7 +12,7 @@ import { GitManager } from './git.js';
 import chalk from 'chalk';
 import readline from 'readline';
 import ora from 'ora';
-import { qbkInput, qbkSelect } from './utils.js';
+import { qbkInput, qbkSelect, ensureGitignore } from './utils.js';
 
 const cwd = process.cwd();
 
@@ -162,8 +162,13 @@ function printLoadingScreen() {
   console.log(`\n${chalk.gray('──────────────────────────────────────────────────────')}\n`);
 }
 
-async function loadMenuState(): Promise<{ config: ReturnType<typeof readConfig> extends Promise<infer T> ? T : never, branchCount: number, isOnLatest: boolean, currentMessage: string }> {
+async function loadMenuState(): Promise<{ config: AiConfig | null, branchCount: number, isOnLatest: boolean, currentMessage: string }> {
   const config = await readConfig(cwd);
+  
+  if (config && config.repositories.length > 0) {
+    await ensureGitignore(cwd);
+  }
+
   let branchCount = 0;
   let isOnLatest = false;
   let currentMessage = '';
@@ -201,7 +206,7 @@ async function loadMenuState(): Promise<{ config: ReturnType<typeof readConfig> 
 async function showMenu() {
   while (true) {
     printLoadingScreen();
-    const spinner = ora({ text: chalk.dim('Cargando...'), color: 'cyan' }).start();
+    const spinner = ora({ text: chalk.dim('Loading...'), color: 'cyan' }).start();
     const { config, branchCount, isOnLatest, currentMessage } = await loadMenuState();
     spinner.stop();
 

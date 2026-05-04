@@ -5,7 +5,8 @@ import chalk from 'chalk';
 import readline from 'readline';
 import { input, select, confirm } from '@inquirer/prompts';
 
-export const AI_FILES = ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md'];
+export const AI_FILES = ['.agents', '.claude', '.claudeignore', 'skills-lock.json', 'AGENTS.md', 'CLAUDE.md'];
+export const REQUIRED_AI_FILES = ['.agents', '.claude', 'AGENTS.md', 'CLAUDE.md'];
 
 export const CONFIG_FILE = '.ai-config.json';
 export const TEMP_DIR = '.qbk-temp';
@@ -176,7 +177,7 @@ export async function copyAiFiles(srcDir: string, destDir: string): Promise<void
 }
 
 export async function validateStructure(dir: string): Promise<boolean> {
-  for (const item of AI_FILES) {
+  for (const item of REQUIRED_AI_FILES) {
     const itemPath = path.join(dir, item);
     if (!(await checkFileExists(itemPath))) {
       return false;

@@ -2,7 +2,7 @@ import { simpleGit } from 'simple-git';
 import type { SimpleGit } from 'simple-git';
 import fs from 'fs/promises';
 import path from 'path';
-import { TEMP_DIR, AI_FILES, checkFileExists } from './utils.js';
+import { TEMP_DIR, AI_FILES, REQUIRED_AI_FILES, checkFileExists } from './utils.js';
 
 export class GitManager {
   private cwd: string;
@@ -261,7 +261,7 @@ export class GitManager {
    */
   async validateStructure(dir?: string): Promise<boolean> {
     const targetDir = dir || this.tempDir;
-    for (const item of AI_FILES) {
+    for (const item of REQUIRED_AI_FILES) {
       const itemPath = path.join(targetDir, item);
       if (!(await checkFileExists(itemPath))) {
         return false;
@@ -290,8 +290,8 @@ export class GitManager {
     for (const item of AI_FILES) {
       const srcPath = path.join(srcDir, item);
       const destPath = path.join(destDir, item);
+      await fs.rm(destPath, { recursive: true, force: true }).catch(() => {});
       if (existsSync(srcPath)) {
-        await fs.rm(destPath, { recursive: true, force: true }).catch(() => {});
         await fs.cp(srcPath, destPath, { recursive: true, force: true, dereference: false });
       }
     }
