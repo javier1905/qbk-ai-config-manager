@@ -114,12 +114,42 @@ export async function addRepoCommand(cwd: string): Promise<boolean> {
 
     if (!isValid) {
       spinnerCheck.fail('Invalid structure.');
-      logErrorBox(
-        'Cannot add repository',
-        `The "${defaultBranch}" branch does not have the required AI config structure (.agents, .claude, AGENTS.md, CLAUDE.md).`
-      );
-      await gitManager.cleanTempRepo();
-      return false;
+      logWarning(`The "${defaultBranch}" branch does not have the required AI config structure.`);
+
+      let shouldInit = false;
+      try {
+        shouldInit = await qbkConfirm({
+          message: 'Do you want to initialize this repository with the base AI structure?',
+          default: true,
+        });
+      } catch {
+        await gitManager.cleanTempRepo();
+        return false;
+      }
+
+      if (shouldInit) {
+        spinnerCheck.text = 'Initializing repository structure...';
+        spinnerCheck.start();
+        try {
+          await gitManager.seedBaseStructure();
+          await git.add('.');
+          await git.commit('feat: initialize AI config structure');
+          await git.push();
+          spinnerCheck.succeed('Repository initialized.');
+        } catch (err: any) {
+          spinnerCheck.fail('Failed to initialize repository.');
+          logError(err.message);
+          await gitManager.cleanTempRepo();
+          return false;
+        }
+      } else {
+        logErrorBox(
+          'Cannot add repository',
+          `The "${defaultBranch}" branch does not have the required AI config structure (.agents, .claude, AGENTS.md, CLAUDE.md).`
+        );
+        await gitManager.cleanTempRepo();
+        return false;
+      }
     }
 
     // Get current HEAD commit
