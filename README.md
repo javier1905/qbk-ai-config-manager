@@ -137,6 +137,15 @@ QBK-AI uses an enriched console interface with colors and animations to make con
 
 ---
 
+## 🤝 Contributing
+
+Contributions are welcome! If you want to help improve QBK-AI:
+
+1.  Read our [Contributing Guidelines](CONTRIBUTING.md).
+2.  Check the [Code of Conduct](CODE_OF_CONDUCT.md).
+3.  Look for [open issues](https://github.com/javier1905/qbk-ai-config-manager/issues).
+4.  Submit a Pull Request!
+
 ---
 
 Made with ❤️ by **Javier Alejandro Sosa**
