@@ -252,7 +252,18 @@ export async function ensureGitignore(cwd: string): Promise<void> {
     logSuccess("Updated .gitignore to ignore AI configuration files.");
   }
 
-  // Ensure local/ directory exists with a README explaining its purpose
+  // Ensure shared/ directory exists with a README (tracked in remote)
+  const sharedDir = path.join(cwd, SHARED_DIR);
+  if (!(await checkFileExists(sharedDir))) {
+    await fs.mkdir(sharedDir, { recursive: true });
+    await fs.writeFile(
+      path.join(sharedDir, "README.md"),
+      `# Shared Configuration\n\nThis folder contains general AI configuration files shared across the team.\nFiles placed here are tracked in the remote repository and available to all developers.\n\nUse this folder for:\n- Team-wide conventions and prompts\n- Shared agent definitions\n- Common context files for AI tools\n`,
+      "utf8",
+    );
+  }
+
+  // Ensure local/ directory exists with a README (gitignored, machine-local only)
   const localDir = path.join(cwd, LOCAL_DIR);
   if (!(await checkFileExists(localDir))) {
     await fs.mkdir(localDir, { recursive: true });
