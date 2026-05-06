@@ -12,6 +12,7 @@ export const AI_FILES = [
   "skills-lock.json",
   "AGENTS.md",
   "CLAUDE.md",
+  "shared",
 ];
 export const REQUIRED_AI_FILES = [
   ".agents",
@@ -23,6 +24,8 @@ export const REQUIRED_AI_FILES = [
 export const CONFIG_FILE = ".ai-config.json";
 export const TEMP_DIR = ".qbk-temp";
 export const STASH_DIR = ".qbk-stash";
+export const SHARED_DIR = "shared";
+export const LOCAL_DIR = "local";
 
 export async function checkFileExists(filePath: string): Promise<boolean> {
   try {
@@ -235,7 +238,7 @@ export async function ensureGitignore(cwd: string): Promise<void> {
     content = await fs.readFile(gitignorePath, "utf8");
   }
 
-  const filesToIgnore = [...AI_FILES, CONFIG_FILE, TEMP_DIR, STASH_DIR];
+  const filesToIgnore = [...AI_FILES, CONFIG_FILE, TEMP_DIR, STASH_DIR, LOCAL_DIR];
   let appended = false;
   for (const file of filesToIgnore) {
     if (!content.includes(file)) {
@@ -247,5 +250,27 @@ export async function ensureGitignore(cwd: string): Promise<void> {
   if (appended) {
     await fs.writeFile(gitignorePath, content, "utf8");
     logSuccess("Updated .gitignore to ignore AI configuration files.");
+  }
+
+  // Ensure shared/ directory exists with a README (tracked in remote)
+  const sharedDir = path.join(cwd, SHARED_DIR);
+  if (!(await checkFileExists(sharedDir))) {
+    await fs.mkdir(sharedDir, { recursive: true });
+    await fs.writeFile(
+      path.join(sharedDir, "README.md"),
+      `# Shared Configuration\n\nThis folder contains general AI configuration files shared across the team.\nFiles placed here are tracked in the remote repository and available to all developers.\n\nUse this folder for:\n- Team-wide conventions and prompts\n- Shared agent definitions\n- Common context files for AI tools\n`,
+      "utf8",
+    );
+  }
+
+  // Ensure local/ directory exists with a README (gitignored, machine-local only)
+  const localDir = path.join(cwd, LOCAL_DIR);
+  if (!(await checkFileExists(localDir))) {
+    await fs.mkdir(localDir, { recursive: true });
+    await fs.writeFile(
+      path.join(localDir, "README.md"),
+      `# Local Configuration\n\nThis folder contains your personal AI configuration files.\nIt is NOT tracked in the remote repository — it stays on your machine only.\n\nUse this folder for:\n- Personal preferences and overrides\n- Developer-specific context\n- Local environment configurations\n`,
+      "utf8",
+    );
   }
 }

@@ -2,7 +2,7 @@ import { simpleGit } from 'simple-git';
 import type { SimpleGit } from 'simple-git';
 import fs from 'fs/promises';
 import path from 'path';
-import { TEMP_DIR, AI_FILES, REQUIRED_AI_FILES, checkFileExists } from './utils.js';
+import { TEMP_DIR, AI_FILES, REQUIRED_AI_FILES, SHARED_DIR, checkFileExists } from './utils.js';
 
 export class GitManager {
   private cwd: string;
@@ -281,6 +281,12 @@ export class GitManager {
     await fs.writeFile(path.join(targetDir, '.claude', '.gitkeep'), '', 'utf8');
     await fs.writeFile(path.join(targetDir, 'AGENTS.md'), '# AI Agents Configuration\n', 'utf8');
     await fs.writeFile(path.join(targetDir, 'CLAUDE.md'), '# Claude Configuration\n', 'utf8');
+    await fs.mkdir(path.join(targetDir, SHARED_DIR), { recursive: true });
+    await fs.writeFile(
+      path.join(targetDir, SHARED_DIR, 'README.md'),
+      `# Shared Configuration\n\nThis folder contains general AI configuration files shared across the team.\nFiles placed here are tracked in the remote repository and available to all developers.\n\nUse this folder for:\n- Team-wide conventions and prompts\n- Shared agent definitions\n- Common context files for AI tools\n`,
+      'utf8',
+    );
   }
 
   // ─── Internal Helpers ───────────────────────────────────────
